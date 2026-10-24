@@ -1554,6 +1554,9 @@ EXTRA['es'].update({
 })
 
 EXTRA['pt'].update({
+    'Temporal anti-aliasing (TAA)': 'Anti-aliasing temporal (TAA)',
+    'Off (default). Smooths edges and shimmering using previous frames, at native resolution. Not validated for this game yet: expect possible ghosting or flicker, and some extra GPU cost. Takes effect after restarting the game.':
+        'Desligado (padrão). Suaviza bordas e cintilação usando quadros anteriores, na resolução nativa. Ainda não validado para este jogo: pode haver rastros (ghosting) ou cintilação, e um custo extra de GPU. Entra em vigor após reiniciar o jogo.',
     'Anti-aliasing': 'Suavização de serrilhado',
     'Smooths jagged edges. FXAA is cheap and a little soft; SMAA keeps the picture sharper and costs a bit more. Both also touch the HUD slightly.':
         'Suaviza as bordas serrilhadas. O FXAA é leve e um pouco suave; o SMAA mantém a imagem mais nítida e custa um pouco mais. Ambos também afetam levemente o HUD.',
@@ -1566,6 +1569,9 @@ EXTRA['pt'].update({
         'O desfoque do próprio jogo em objetos distantes, mais forte nas cenas. Desligado, a imagem inteira fica nítida.',
 })
 EXTRA['es'].update({
+    'Temporal anti-aliasing (TAA)': 'Anti-aliasing temporal (TAA)',
+    'Off (default). Smooths edges and shimmering using previous frames, at native resolution. Not validated for this game yet: expect possible ghosting or flicker, and some extra GPU cost. Takes effect after restarting the game.':
+        'Desactivado (por defecto). Suaviza bordes y parpadeos usando fotogramas anteriores, a resolución nativa. Aún no validado para este juego: puede haber estelas (ghosting) o parpadeo, y algo más de coste de GPU. Se aplica al reiniciar el juego.',
     'Anti-aliasing': 'Suavizado de bordes',
     'Smooths jagged edges. FXAA is cheap and a little soft; SMAA keeps the picture sharper and costs a bit more. Both also touch the HUD slightly.':
         'Suaviza los bordes dentados. FXAA es ligero y algo suave; SMAA mantiene la imagen más nítida y cuesta un poco más. Ambos afectan también ligeramente al HUD.',
@@ -2503,6 +2509,9 @@ EXTRA['id'].update({
 })
 
 EXTRA['zh'].update({
+    'Temporal anti-aliasing (TAA)': '时间性抗锯齿 (TAA)',
+    'Off (default). Smooths edges and shimmering using previous frames, at native resolution. Not validated for this game yet: expect possible ghosting or flicker, and some extra GPU cost. Takes effect after restarting the game.':
+        '关闭（默认）。以原生分辨率利用前几帧平滑边缘和闪烁。尚未针对本游戏验证：可能出现拖影或闪烁，并增加一些 GPU 开销。重启游戏后生效。',
     'Anti-aliasing': '抗锯齿',
     'Smooths jagged edges. FXAA is cheap and a little soft; SMAA keeps the picture sharper and costs a bit more. Both also touch the HUD slightly.':
         '平滑锯齿边缘。FXAA 开销小但画面略软；SMAA 画面更锐利，开销稍大。两者也会轻微影响 HUD。',
@@ -2516,6 +2525,9 @@ EXTRA['zh'].update({
 })
 
 EXTRA['id'].update({
+    'Temporal anti-aliasing (TAA)': 'Anti-aliasing temporal (TAA)',
+    'Off (default). Smooths edges and shimmering using previous frames, at native resolution. Not validated for this game yet: expect possible ghosting or flicker, and some extra GPU cost. Takes effect after restarting the game.':
+        'Mati (bawaan). Menghaluskan tepi dan kedipan memakai frame sebelumnya, pada resolusi asli. Belum divalidasi untuk game ini: mungkin muncul ghosting atau kedipan, dan beban GPU sedikit bertambah. Berlaku setelah game dimulai ulang.',
     'Anti-aliasing': 'Anti-aliasing',
     'Smooths jagged edges. FXAA is cheap and a little soft; SMAA keeps the picture sharper and costs a bit more. Both also touch the HUD slightly.':
         'Menghaluskan tepi bergerigi. FXAA ringan dan sedikit lembut; SMAA menjaga gambar lebih tajam dan sedikit lebih berat. Keduanya juga sedikit memengaruhi HUD.',

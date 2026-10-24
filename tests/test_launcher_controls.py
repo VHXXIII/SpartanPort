@@ -305,6 +305,26 @@ class ControlMapTest(unittest.TestCase):
             env = launcher.game_environment({**launcher.APP_DEFAULTS, 'experimental_upscaler': saved})
             self.assertEqual(env['SPARTAN_EXPERIMENTAL_UPSCALER'], '0')
 
+    def test_taa_switch_selects_only_native_taa(self):
+        # Off by default: the temporal upscalers stay parked and nothing selects one.
+        self.assertIs(launcher.APP_DEFAULTS['taa'], False)
+        env = launcher.game_environment({**launcher.APP_DEFAULTS})
+        self.assertEqual(env['SPARTAN_EXPERIMENTAL_UPSCALER'], '0')
+        self.assertNotIn('SPARTAN_UPSCALER', {k for k in env if k not in __import__('os').environ})
+        # On: the experimental gate opens and the environment picks TAA, never FSR or DLSS.
+        with mock.patch.dict(__import__('os').environ, {'SPARTAN_RENDER_RES': '1280x720'}):
+            env = launcher.game_environment({**launcher.APP_DEFAULTS, 'taa': True})
+        self.assertEqual(env['SPARTAN_EXPERIMENTAL_UPSCALER'], '1')
+        self.assertEqual(env['SPARTAN_UPSCALER'], 'taa')
+        self.assertNotIn('SPARTAN_RENDER_RES', env)
+        # Only a real True counts: a stray text or number from settings.json does not open the gate.
+        for saved in ('1', 'true', 1, None):
+            env = launcher.game_environment({**launcher.APP_DEFAULTS, 'taa': saved})
+            self.assertEqual(env['SPARTAN_EXPERIMENTAL_UPSCALER'], '0')
+        # The 2.1.8 switch alone still does nothing.
+        env = launcher.game_environment({**launcher.APP_DEFAULTS, 'experimental_upscaler': True})
+        self.assertEqual(env['SPARTAN_EXPERIMENTAL_UPSCALER'], '0')
+
     def test_glyph_style_is_off_by_default(self):
         self.assertEqual(launcher.APP_DEFAULTS['glyph_style'], 'off')
         self.assertNotIn('SPARTAN_GLYPH_STYLE', launcher.game_environment({**launcher.APP_DEFAULTS}))
