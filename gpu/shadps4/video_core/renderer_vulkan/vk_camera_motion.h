@@ -6,9 +6,11 @@
 #pragma once
 
 #include <array>
+#include <utility>
 #include <vector>
 
 #include "common/types.h"
+#include "video_core/renderer_vulkan/camera_view_projection.h"
 #include "video_core/renderer_vulkan/vk_common.h"
 #include "video_core/buffer_cache/buffer.h"
 #include "video_core/texture_cache/image.h"
@@ -29,7 +31,10 @@ public:
     CameraMotion(const Instance& instance, Scheduler& scheduler,
                  VideoCore::TextureCache& texture_cache, Runtime& runtime);
     ~CameraMotion();
-    void InvalidateHistory() { current.valid = previous.valid = false; }
+    void InvalidateHistory() {
+        current.valid = previous.valid = false;
+        vp_current_valid = vp_previous_valid = false;
+    }
     void SetObjectMotion(ObjectMotion* motion) noexcept {
         object_motion = motion;
     }
@@ -48,7 +53,19 @@ public:
 
     /// Both cameras and the scene depth of the current frame are known.
     [[nodiscard]] bool Ready() const noexcept {
-        return current.valid && previous.valid && depth_id;
+        return CameraHistory() && depth_id;
+    }
+    /// This frame's camera and the previous one are known (the log's status line).
+    [[nodiscard]] bool CameraHistory() const noexcept {
+        return (current.valid && previous.valid) || (vp_current_valid && vp_previous_valid);
+    }
+    /// Frames with a view-projection camera since the last call (the log's status line).
+    [[nodiscard]] u32 TakeCameraFrames() noexcept {
+        return std::exchange(vp_frames, 0u);
+    }
+    /// The camera is one view-projection matrix (God of War III), not the 864 byte constants.
+    [[nodiscard]] bool ViewProjectionCamera() const noexcept {
+        return vp_current_valid;
     }
     [[nodiscard]] VideoCore::ImageId Depth() const noexcept {
         return depth_id;
@@ -68,6 +85,25 @@ public:
     /// `motion_view` (RG16F storage, General), pixels, previous minus current.
     void RecordMotion(vk::CommandBuffer cmdbuf, vk::ImageView depth_view, vk::ImageView motion_view,
                       u32 width, u32 height);
+
+    /// The depth pre-pass (no colour target, a screen-sized depth): its depth is the scene depth.
+    void OnScenePrepass(VideoCore::ImageId depth);
+
+    /// A vertex constant buffer of the pre-pass: counted when its first 16 floats are a
+    /// view-projection for a screen of `width` x `height`.
+    void OnCameraCandidate(const float* data, u32 size_bytes, u32 width, u32 height);
+
+    /// Picks this frame's camera (once per frame; the previous one is kept). False without one.
+    bool ResolveViewProjection();
+
+    /// The motion vector pass for the view-projection camera (see camera_motion_vp.comp).
+    void RecordMotionVp(vk::CommandBuffer cmdbuf, vk::ImageView depth_view,
+                        vk::ImageView motion_view, u32 width, u32 height);
+
+    /// TAA's reprojection matrix (view-projection camera).
+    [[nodiscard]] const CameraVp::Matrix& Reprojection() const noexcept {
+        return vp_reprojection;
+    }
 
     /// A bound constant buffer of 864 bytes: checks the scene constant signature.
     void OnConstants(const float* data);
@@ -95,6 +131,14 @@ private:
     Runtime& runtime;
     bool debug_overlay = false;
     bool for_upscaler = false;
+    CameraVp::Tally vp_tally;
+    CameraVp::Matrix vp_current{}, vp_previous{}, vp_reprojection{};
+    bool vp_current_valid = false, vp_previous_valid = false, vp_resolved = false;
+    u32 vp_flip = 0;
+    u32 vp_frames = 0;
+    vk::UniqueDescriptorSetLayout vp_desc_layout;
+    vk::UniquePipelineLayout vp_pipeline_layout;
+    vk::UniquePipeline vp_pipeline;
     vk::UniqueDescriptorSetLayout motion_desc_layout;
     vk::UniquePipelineLayout motion_pipeline_layout;
     vk::UniquePipeline motion_pipeline;

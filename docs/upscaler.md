@@ -304,3 +304,23 @@ pass0_post, проходы модели 1..12 (за каждым `_post`, обн
 **Поправка к A/B выше («кадр упирается в CPU»).** Те замеры шли, пока 12 зависших процессов
 shadPS4 занимали по ядру. На свободной системе: «host copies» 1.6%, ожидание GPU ~41% — кадр
 упирается в GPU, так что async compute для FSR снова имеет смысл.
+
+## God of War III Remastered layout (TAA and FSR 3.1 Native AA)
+
+The frame differs from the 5-target G-buffer layout above (found with `tools/spartanport_frame_map.py`
+on F11 captures):
+
+- Depth: the depth pre-pass (no colour target, screen-sized depth, more than 6 indices per draw).
+  Square shadow-map passes are skipped by aspect.
+- Camera: one vertex constant buffer of the pre-pass holds a column-major view-projection in its
+  first 16 floats. Which shader and slot differs, so it is recognised by content
+  (`camera_view_projection.h`, unit test `tests/test_camera_vp.cpp`). Depth is `z / w` with
+  `z = w - near`: 0 at the near plane, 1 at infinity.
+- Motion vectors: `camera_motion_vp.comp`, from `previousVP * inverse(currentVP)`.
+  `SPARTAN_VP_FLIP=x|y|xy` mirrors the screen axes for calibration if the image ghosts when moving.
+- Jitter: viewport offset of draws with the scene depth or its same-size copy (transparents).
+- Trigger: the draw whose pixel shader is the post-process composite (`0c20ededc9e7c40c`, override
+  `SPARTAN_UPSCALER_COMPOSITE_PS`). The upscale runs before the next draw or dispatch, on the 8-bit
+  sRGB scene colour (sampled through an sRGB view), before the HUD. The result is written back with
+  a blit; the game's alpha is kept (`ldr_alpha.comp`).
+- `last_run.log` prints `Temporal AA status: ...` every ~5 s (`composite_seen`, `ldr_runs`, `skip`).

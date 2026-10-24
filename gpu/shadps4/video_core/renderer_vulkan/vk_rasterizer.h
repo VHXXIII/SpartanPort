@@ -339,6 +339,9 @@ private:
     bool motion_draw = false;
     u64 motion_geometry{};    ///< vertex-stream identity of the current direct draw
     bool gbuffer_draw = false;
+    bool scan_camera = false;                    ///< depth pre-pass draw: look for the camera constants
+    std::array<u32, 2> scan_size{};              ///< its depth size
+    bool in_display_pass = false;                ///< the draws of one display pass count once
     /// spartanport: the draws of the game's motion blur skipped when the setting is off
     /// (spartanport_motion_blur.h). Only touched by the thread that selects pipelines.
     SpartanMotionBlur::Rule motion_blur_rule;

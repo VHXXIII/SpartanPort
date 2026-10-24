@@ -10,6 +10,7 @@
 
 #include "video_core/host_shaders/camera_motion_comp.h"
 #include "video_core/host_shaders/camera_motion_debug_comp.h"
+#include "video_core/host_shaders/camera_motion_vp_comp.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_object_motion.h"
 #include "video_core/renderer_vulkan/vk_runtime.h"
@@ -29,6 +30,13 @@ struct PushConstants {
     std::array<float, 2> jitter;
     std::array<float, 2> previous_jitter;
     u32 mode;
+};
+
+struct VpPushConstants {
+    CameraVp::Matrix reproject;
+    std::array<float, 2> size;
+    std::array<float, 2> jitter;
+    u32 flip;
 };
 
 /// a * b for 3x4 affine matrices (rows [R | t]).
@@ -96,6 +104,45 @@ CameraMotion::CameraMotion(const Instance& instance_, Scheduler& scheduler_,
                     .layout = *motion_pipeline_layout,
                 }));
         device.destroyShaderModule(motion_module);
+
+        // The view-projection camera (God of War III): depth in, motion vectors out.
+        const std::array<vk::DescriptorSetLayoutBinding, 2> vp_bindings = {{
+            {.binding = 0,
+             .descriptorType = vk::DescriptorType::eSampledImage,
+             .descriptorCount = 1,
+             .stageFlags = vk::ShaderStageFlagBits::eCompute},
+            {.binding = 1,
+             .descriptorType = vk::DescriptorType::eStorageImage,
+             .descriptorCount = 1,
+             .stageFlags = vk::ShaderStageFlagBits::eCompute},
+        }};
+        vp_desc_layout = Check(device.createDescriptorSetLayoutUnique({
+            .flags = vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR,
+            .bindingCount = static_cast<u32>(vp_bindings.size()),
+            .pBindings = vp_bindings.data(),
+        }));
+        const vk::PushConstantRange vp_range{.stageFlags = vk::ShaderStageFlagBits::eCompute,
+                                             .offset = 0,
+                                             .size = sizeof(VpPushConstants)};
+        vp_pipeline_layout = Check(device.createPipelineLayoutUnique({
+            .setLayoutCount = 1,
+            .pSetLayouts = &*vp_desc_layout,
+            .pushConstantRangeCount = 1,
+            .pPushConstantRanges = &vp_range,
+        }));
+        const auto vp_module = CompileSPV(CAMERA_MOTION_VP_COMP, device);
+        vp_pipeline = Check(device.createComputePipelineUnique(
+            {}, vk::ComputePipelineCreateInfo{
+                    .stage = {.stage = vk::ShaderStageFlagBits::eCompute,
+                              .module = vp_module,
+                              .pName = "main"},
+                    .layout = *vp_pipeline_layout,
+                }));
+        device.destroyShaderModule(vp_module);
+        // Calibration of the screen axes against the game's viewport: x, y or xy.
+        if (const char* flip = std::getenv("SPARTAN_VP_FLIP")) {
+            vp_flip = (std::strchr(flip, 'x') ? 1u : 0u) | (std::strchr(flip, 'y') ? 2u : 0u);
+        }
     }
     if (!debug_overlay) {
         return;
@@ -153,15 +200,26 @@ CameraMotion::CameraMotion(const Instance& instance_, Scheduler& scheduler_,
 CameraMotion::~CameraMotion() = default;
 
 float CameraMotion::VerticalFov() const noexcept {
+    if (vp_current_valid) {
+        return CameraVp::VerticalFov(vp_current);
+    }
     return 2.0f * std::atan(1.0f / current.proj[1]);
 }
 
 float CameraMotion::Near() const noexcept {
+    if (vp_current_valid) {
+        return CameraVp::NearPlane(vp_current);
+    }
     // depth = zs + zo / z is 0 at the near plane.
     return -current.proj[3] / current.proj[2];
 }
 
 std::array<std::array<float, 4>, 3> CameraMotion::TaaDepthParameters() const noexcept {
+    if (vp_current_valid) {
+        // Depth 0 at the near plane and 1 at infinity: only the sky threshold (z scale 1) is
+        // read from these, the rest is in Reprojection().
+        return {{{1.0f, 1.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 0.0f}}};
+    }
     const auto transform = Multiply(previous.view, current.inv_view);
     return {current.proj, previous.proj,
             {transform[8], transform[9], transform[10], transform[11]}};
@@ -244,12 +302,84 @@ void CameraMotion::OnGBufferPass(VideoCore::ImageId depth) {
     depth_id = depth;
 }
 
+void CameraMotion::OnScenePrepass(VideoCore::ImageId depth) {
+    if (!depth_id) {
+        depth_id = depth;
+    }
+}
+
+void CameraMotion::OnCameraCandidate(const float* data, u32 size_bytes, u32 width, u32 height) {
+    if (size_bytes >= 16 * sizeof(float) &&
+        CameraVp::LooksLikeViewProjection(data, float(width), float(height))) {
+        vp_tally.Add(data);
+        const std::array<u32, 2> size{width, height};
+        if (size != render_size) {
+            std::printf("Camera motion: scene render size %ux%u (view-projection camera)\n",
+                        width, height);
+            render_size = size;
+        }
+    }
+}
+
+bool CameraMotion::ResolveViewProjection() {
+    if (vp_resolved) {
+        return vp_current_valid;
+    }
+    vp_resolved = true;
+    CameraVp::Matrix best;
+    if (!vp_tally.Best(best)) {
+        return false;
+    }
+    vp_previous = vp_current;
+    vp_previous_valid = vp_current_valid;
+    vp_current = best;
+    vp_current_valid = true;
+    frame_has_camera = true;
+    ++vp_frames;
+    if (vp_previous_valid && !CameraVp::Reprojection(vp_previous, vp_current, vp_reprojection)) {
+        vp_previous_valid = false;
+    }
+    return true;
+}
+
+void CameraMotion::RecordMotionVp(vk::CommandBuffer cmdbuf, vk::ImageView depth_view,
+                                  vk::ImageView motion_view, u32 width, u32 height) {
+    const VpPushConstants push{
+        .reproject = vp_reprojection,
+        .size = {float(width), float(height)},
+        .jitter = jitter,
+        .flip = vp_flip,
+    };
+    const vk::DescriptorImageInfo depth_info{.imageView = depth_view,
+                                             .imageLayout = vk::ImageLayout::eGeneral};
+    const vk::DescriptorImageInfo motion_info{.imageView = motion_view,
+                                              .imageLayout = vk::ImageLayout::eGeneral};
+    const std::array<vk::WriteDescriptorSet, 2> writes = {{
+        {.dstBinding = 0,
+         .descriptorCount = 1,
+         .descriptorType = vk::DescriptorType::eSampledImage,
+         .pImageInfo = &depth_info},
+        {.dstBinding = 1,
+         .descriptorCount = 1,
+         .descriptorType = vk::DescriptorType::eStorageImage,
+         .pImageInfo = &motion_info},
+    }};
+    cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, *vp_pipeline);
+    cmdbuf.pushDescriptorSetKHR(vk::PipelineBindPoint::eCompute, *vp_pipeline_layout, 0, writes);
+    cmdbuf.pushConstants(*vp_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(push),
+                         &push);
+    cmdbuf.dispatch((width + 7) / 8, (height + 7) / 8, 1);
+}
+
 void CameraMotion::OnDisplayPass(VideoCore::ImageId frame) {
     if (debug_overlay && frame && depth_id && current.valid && previous.valid) {
         Overlay(frame);
     }
+    ResolveViewProjection(); // keeps the history going when the upscaler did not run this frame
     if (!frame_has_camera) InvalidateHistory();
     frame_has_camera = false;
+    vp_resolved = false;
+    vp_tally.Clear();
     depth_id = {};
 }
 

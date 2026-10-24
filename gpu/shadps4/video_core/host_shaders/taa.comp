@@ -13,10 +13,11 @@ layout(binding = 6, rgba16f) uniform writeonly image2D diagnostic_img;
 layout(push_constant) uniform Params {
     vec2 jitter;
     uint reset_history;
-    uint pad; // bits 0-7: diagnostic output (SPARTAN_TAA_DIAGNOSTICS); 8-12: A/B switches
+    uint pad; // bits 0-7: diagnostic output (SPARTAN_TAA_DIAGNOSTICS); 8-12: A/B switches; 24: view-projection depth
     vec4 proj;
     vec4 prev_proj;
     vec4 previous_z;
+    mat4 reproject; // view-projection mode (pad bit 24): previous VP * inverse(current VP)
 };
 
 vec4 fetchLinear(sampler2D tex, vec2 position) {
@@ -35,6 +36,12 @@ float expectedPreviousDepth(float depth, vec2 source, ivec2 size) {
     if (depth >= 1.0) return 1.0;
     vec2 uv = (source + 0.5 - jitter) / vec2(size);
     vec2 ndc = vec2(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
+    if ((pad & (1u << 24)) != 0u) {
+        // God of War III: one matrix from this frame's clip space to the previous one.
+        vec4 previous = reproject * vec4(ndc, depth, 1.0);
+        if (previous.w <= 1e-6) return -1.0;
+        return previous.z / previous.w;
+    }
     float z = proj.w / min(depth - proj.z, -1e-8);
     float prev_z = dot(previous_z, vec4(ndc * z / proj.xy, z, 1.0));
     if (prev_z <= 0.0) return -1.0;

@@ -64,6 +64,18 @@ public:
     /// Before a compute dispatch: the post-processing combine shader triggers the upscale.
     void OnDispatch(u64 cs_hash);
 
+    /// God of War III: a draw whose pixel shader is the post-process composite, into the 8-bit
+    /// sRGB scene colour that the HUD and the display pass use next. The upscale runs before
+    /// the next draw or dispatch (RunPending), on the finished frame, before the HUD.
+    void OnPixelShader(u64 ps_hash, VideoCore::ImageId color);
+
+    /// Start of every draw and dispatch: runs the upscale queued by OnPixelShader.
+    void RunPending();
+
+    /// Draws into this depth image are jittered: the scene depth, and the full-size copy the
+    /// transparent pass uses (same size as the scene depth, written by the game).
+    [[nodiscard]] bool JitterDepth(VideoCore::ImageId depth) const;
+
     /// Start of a frame in the command stream (display pass).
     bool OnFrameStart();
     bool RasterScaling() const;
@@ -140,6 +152,8 @@ private:
     u64 view_uses = 0;
 
     void Run();
+    /// The 8-bit sRGB scene colour: TAA or FSR 3.1 on the tonemapped frame, native resolution.
+    void RunLdr();
     void RunScaled();
     void RunUiOnly(VideoCore::ImageId color, VideoCore::ImageId depth);
     void EnsureUiResources(u32 width, u32 height, vk::Format color, vk::Format depth);
@@ -191,6 +205,11 @@ private:
     bool dispatched_last_frame = false;
     u32 status_frames = 0;  // frames since the last status line in the log
     u32 trigger_seen = 0;   // times the frame's trigger dispatch was seen since then
+    u32 composite_seen = 0; // composite draws seen since then (God of War III)
+    u32 ldr_runs = 0;       // upscales of the 8-bit scene colour since then
+    const char* skip_reason = "none"; // why the last queued upscale did not run
+    bool composite_pending = false;
+    u64 composite_ps = 0x0c20ededc9e7c40c; // SPARTAN_UPSCALER_COMPOSITE_PS overrides it
     bool last_active = false, last_jitter = false;
 
 
@@ -273,6 +292,9 @@ private:
     std::array<vk::UniqueImageView, 2> taa_history_views;
     u32 taa_next = 0;
     vk::UniqueSampler taa_sampler;
+    vk::UniqueDescriptorSetLayout ldr_alpha_desc_layout;
+    vk::UniquePipelineLayout ldr_alpha_pipeline_layout;
+    vk::UniquePipeline ldr_alpha_pipeline;
     vk::UniqueDescriptorSetLayout taa_desc_layout;
     vk::UniquePipelineLayout taa_pipeline_layout;
     vk::UniquePipeline taa_pipeline;
