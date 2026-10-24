@@ -274,13 +274,22 @@ void Rasterizer::PrepareRenderState(const GraphicsPipeline* pipeline) {
     }
     // spartanport (God of War III): the depth pre-pass: no colour target and a screen-sized depth
     // (not the square shadow maps). Its depth is the scene depth, its vertex constants hold the
-    // main camera as a view-projection matrix (BindBuffers looks for it).
+    // main camera as a view-projection matrix (BindBuffers looks for it by content).
     scan_camera = false;
-    if (camera_motion->Enabled() && key.mrt_mask == 0 && db_desc.first &&
-        (regs.num_indices > 6 || regs.num_instances.NumInstances() > 1)) {
+    if (camera_motion->Enabled() && db_desc.first) {
+        bool no_color = true;
+        for (s32 cb = 0; cb < std::bit_width(key.mrt_mask); ++cb) {
+            no_color &= !cb_descs[cb].first;
+        }
         const auto& depth = texture_cache.GetImage(db_desc.first);
         const u32 depth_w = depth.info.size.width, depth_h = depth.info.size.height;
-        if (depth_w >= 1280 && depth_h >= 720 && depth_w * 10 > depth_h * 13) {
+        static u32 logged = 0;
+        if (no_color && depth_w >= 1000 && logged < 12 && regs.num_indices > 6) {
+            ++logged; // once: what the depth-only draws look like (last_run.log)
+            std::printf("Camera motion: depth-only draw %u: depth %ux%u indices %u mrt %x\n",
+                        logged, depth_w, depth_h, u32(regs.num_indices), u32(key.mrt_mask));
+        }
+        if (no_color && depth_w >= 1280 && depth_h >= 720 && depth_w * 10 > depth_h * 13) {
             camera_motion->OnScenePrepass(db_desc.first);
             scan_camera = db_desc.first == camera_motion->Depth();
             scan_size = {depth_w, depth_h};

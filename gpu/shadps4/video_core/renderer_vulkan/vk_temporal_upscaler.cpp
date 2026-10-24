@@ -339,11 +339,12 @@ bool TemporalUpscaler::OnFrameStart() {
     SpartanSettings::Get().temporal_applied = dispatched_last_frame;
     if (SpartanSettings::Get().upscaler != SpartanSettings::UpscalerOff && ++status_frames >= 300) {
         // One line every few seconds: why a selected TAA or FSR does (not) run (last_run.log).
+        const auto scan = camera_motion.TakeScanCounts();
         std::printf("Temporal AA status: mode=%s ran_last_frame=%d active=%d failed=%d camera_ready=%d "
-                    "camera_frames=%u trigger_seen=%u composite_seen=%u ldr_runs=%u skip=%s scaled_session=%d\n",
+                    "camera_frames=%u prepass_draws=%u camera_buffers=%u trigger_seen=%u composite_seen=%u ldr_runs=%u skip=%s scaled_session=%d\n",
                     SpartanSettings::UpscalerName(SpartanSettings::Get().upscaler), int(dispatched_last_frame),
                     int(Active()), int(failed), int(camera_motion.CameraHistory()),
-                    camera_motion.TakeCameraFrames(), trigger_seen, composite_seen, ldr_runs,
+                    camera_motion.TakeCameraFrames(), scan[0], scan[1], trigger_seen, composite_seen, ldr_runs,
                     skip_reason, int(Scaled()));
         status_frames = 0;
         trigger_seen = 0;

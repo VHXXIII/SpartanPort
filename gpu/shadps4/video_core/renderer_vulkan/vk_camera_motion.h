@@ -63,6 +63,10 @@ public:
     [[nodiscard]] u32 TakeCameraFrames() noexcept {
         return std::exchange(vp_frames, 0u);
     }
+    /// Pre-pass draws scanned and constant buffers that were a camera, since the last call.
+    [[nodiscard]] std::array<u32, 2> TakeScanCounts() noexcept {
+        return {std::exchange(scan_draws, 0u), std::exchange(scan_hits, 0u)};
+    }
     /// The camera is one view-projection matrix (God of War III), not the 864 byte constants.
     [[nodiscard]] bool ViewProjectionCamera() const noexcept {
         return vp_current_valid;
@@ -135,7 +139,7 @@ private:
     CameraVp::Matrix vp_current{}, vp_previous{}, vp_reprojection{};
     bool vp_current_valid = false, vp_previous_valid = false, vp_resolved = false;
     u32 vp_flip = 0;
-    u32 vp_frames = 0;
+    u32 vp_frames = 0, scan_draws = 0, scan_hits = 0;
     vk::UniqueDescriptorSetLayout vp_desc_layout;
     vk::UniquePipelineLayout vp_pipeline_layout;
     vk::UniquePipeline vp_pipeline;

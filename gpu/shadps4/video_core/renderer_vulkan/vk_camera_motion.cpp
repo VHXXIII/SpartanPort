@@ -303,6 +303,7 @@ void CameraMotion::OnGBufferPass(VideoCore::ImageId depth) {
 }
 
 void CameraMotion::OnScenePrepass(VideoCore::ImageId depth) {
+    ++scan_draws;
     if (!depth_id) {
         depth_id = depth;
     }
@@ -312,6 +313,7 @@ void CameraMotion::OnCameraCandidate(const float* data, u32 size_bytes, u32 widt
     if (size_bytes >= 16 * sizeof(float) &&
         CameraVp::LooksLikeViewProjection(data, float(width), float(height))) {
         vp_tally.Add(data);
+        ++scan_hits;
         const std::array<u32, 2> size{width, height};
         if (size != render_size) {
             std::printf("Camera motion: scene render size %ux%u (view-projection camera)\n",
