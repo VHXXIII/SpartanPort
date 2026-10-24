@@ -194,6 +194,7 @@ Availability checked against [release 2.2.0](https://github.com/FelipePrado0/Spa
 | RADV sparse-queue fix | Not included | Merged into `main` |
 | FSR 1, FSR 3.1, FSR 4, TAA, DLSS | Disabled | Disabled in the launcher/game settings path |
 | RCAS sharpening | Available | Available |
+| FXAA / SMAA anti-aliasing | Not included | Optional, off by default (in-game menu Image tab, launcher Graphics > Effects); works on the finished frame, HUD included |
 
 The Linux AppImage was rebuilt on October 14 for glibc 2.39 or newer. The Windows and Linux
 packages can use different source revisions. Check the release notes for changes to later downloads.
@@ -554,6 +555,7 @@ Also used: [LibAtrac9](https://github.com/Thealexbarney/LibAtrac9), [FFmpeg](htt
 [miniz](https://github.com/richgel999/miniz), [xbyak](https://github.com/herumi/xbyak),
 [Vulkan Memory Allocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator),
 [FSR-Vulkan](https://github.com/FireBurn/FSR-Vulkan) and the AMD FidelityFX SDK,
+[SMAA](https://github.com/iryoku/smaa) (Jimenez et al., MIT; the anti-aliasing option) and the FXAA technique by Timothy Lottes,
 [MSYS2](https://www.msys2.org), [LLVM](https://llvm.org) and [Pillow](https://python-pillow.org).
 
 ## License

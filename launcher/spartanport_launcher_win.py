@@ -482,10 +482,11 @@ INI_DEFAULTS = {'upscaler': 'fsr3', 'preset': '1',
                 'anisotropy': '0', 'vibration': '100', 'mouse_prompt_distance': '48', 'mouse_lock': '1',
                 'mouse_aim_style': '0', 'mouse_aim_sensitivity': '100',
                 'master_volume': '100', 'audio_channels': 'auto', 'motion_blur': '1',
-                'depth_of_field': '1'}
+                'depth_of_field': '1', 'anti_aliasing': 'off'}
 DISPLAY_MODES = [('windowed', ('Windowed',)), ('borderless', ('Borderless',)), ('fullscreen', ('Fullscreen',))]
 AUDIO_CHANNELS = [('auto', ('Automatic',)), ('stereo', ('Stereo',)), ('5.1', ('5.1 surround',)),
                   ('7.1', ('7.1 surround',))]
+ANTI_ALIASING = [('off', ('Off',)), ('fxaa', ('FXAA',)), ('smaa', ('SMAA',))]
 ANISOTROPY = [('0', ('Game default',)), ('2', ('2x',)), ('4', ('4x',)), ('8', ('8x',)), ('16', ('16x',))]
 FPS_LIMITS = [('30', ('30',)), ('60', ('60',)), ('100', ('100',)), ('120', ('120',)), ('144', ('144',)), ('180', ('180',)), ('240', ('240',)), ('0', ('Unlimited',))]
 # The sidebar's pages, top to bottom, and the methods that refresh a page's lists when it is shown.
@@ -2008,6 +2009,8 @@ class Launcher:
                    _("The game's own motion blur on fast moving objects and the camera. Off removes it."))
         self.check(f, 'depth_of_field', 'ini', _('Depth of field'),
                    _("The game's own blur of distant objects, strongest in cutscenes. Off keeps the whole picture sharp."))
+        self.row(f, _('Anti-aliasing'), self.choice(f, 'anti_aliasing', 'ini', ANTI_ALIASING),
+                 _('Smooths jagged edges. FXAA is cheap and a little soft; SMAA keeps the picture sharper and costs a bit more. Both also touch the HUD slightly.'))
         self.section(f, _('Textures'))
         self.row(f, _('Anisotropic filtering'), self.choice(f, 'anisotropy', 'ini', ANISOTROPY),
                  _('Sharper floors and walls seen at an angle, at little cost on most graphics cards.'),

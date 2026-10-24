@@ -90,6 +90,11 @@ struct Values {
     std::atomic<bool> motion_blur{true};
     /// The game's depth of field (spartanport_depth_of_field.h); off keeps the whole picture sharp. Live.
     std::atomic<bool> depth_of_field{true};
+    /// Anti-aliasing of the finished frame (SpartanGraphics::AntiAliasing: off, FXAA, SMAA). Live.
+    std::atomic<int> anti_aliasing{0};
+    /// Set by the presenter: the anti-aliasing pass ran on the last frame (a mode that could not be
+    /// set up on this GPU falls back to off).
+    std::atomic<bool> aa_applied{false};
     /// Set by the presenter: sharpening ran on the last frame (it needs FSR 1 when the game's
     /// image is smaller than the window).
     std::atomic<bool> rcas_applied{false};

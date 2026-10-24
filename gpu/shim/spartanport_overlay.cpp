@@ -441,6 +441,16 @@ void ImageTab() {
     const int iw = s.image_width, ih = s.image_height, ww = s.window_width, wh = s.window_height;
     const bool downscaling = iw > ww || ih > wh;
     const bool rcas_blocked = s.rcas && !s.rcas_applied;
+    Separator("Anti-aliasing");
+    if (BeginRows("##anti_aliasing")) {
+        ChoiceRow("Anti-aliasing", s.anti_aliasing, G::AntiAliasingNames.data(), nullptr, G::AntiAliasingCount,
+                  "Smooths jagged edges. FXAA is cheap and a little soft; SMAA keeps the picture sharper and "
+                  "costs a bit more. Both also touch the HUD slightly.");
+        ImGui::EndTable();
+    }
+    if (s.anti_aliasing != G::AaOff && !s.aa_applied) {
+        DisabledText("Anti-aliasing is not active: this graphics card could not set it up.");
+    }
     Separator("Sharpening");
     if (BeginRows("##scaling")) {
         ImGui::BeginDisabled(rcas_blocked);

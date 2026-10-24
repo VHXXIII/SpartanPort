@@ -109,6 +109,8 @@ void Set(Values& v, const std::string& key, const std::string& value) {
         v.fsr1 = false;
     } else if (key == "rcas") {
         v.rcas = i != 0;
+    } else if (key == "anti_aliasing") {
+        v.anti_aliasing = SpartanGraphics::ParseAntiAliasing(value);
     } else if (key == "motion_blur") {
         v.motion_blur = i != 0;
     } else if (key == "depth_of_field") {
@@ -217,7 +219,7 @@ void Load() {
         {"SPARTAN_MOUSE_PROMPT_DISTANCE", "mouse_prompt_distance"}, {"SPARTAN_MOUSE_LOCK", "mouse_lock"},
         {"SPARTAN_MOUSE_AIM_STYLE", "mouse_aim_style"}, {"SPARTAN_MOUSE_AIM_SENSITIVITY", "mouse_aim_sensitivity"},
         {"SPARTAN_AUTO_QTE", "auto_qte"},                {"SPARTAN_MOTION_BLUR", "motion_blur"},
-        {"SPARTAN_DEPTH_OF_FIELD", "depth_of_field"},
+        {"SPARTAN_DEPTH_OF_FIELD", "depth_of_field"},    {"SPARTAN_ANTI_ALIASING", "anti_aliasing"},
     };
     for (const auto& [env, key] : env_keys) {
         if (const char* value = std::getenv(env); value && value[0]) {
@@ -386,6 +388,8 @@ void Save() {
                  v.anisotropy.load(), v.vibration.load(), v.mouse_prompt_distance.load(), int(v.mouse_lock.load()),
                  v.mouse_aim_style.load(), v.mouse_aim_sensitivity.load());
     std::fprintf(file, "motion_blur=%d\ndepth_of_field=%d\n", int(v.motion_blur.load()), int(v.depth_of_field.load()));
+    std::fprintf(file, "anti_aliasing=%s\n",
+                 SpartanGraphics::AntiAliasingKeys[std::clamp(v.anti_aliasing.load(), 0, int(SpartanGraphics::AaSmaa))].data());
     std::fprintf(file, "master_volume=%d\naudio_channels=%s\n", v.master_volume.load(),
                  AudioChannelKeys[std::clamp(v.audio_channels.load(), 0, AudioChannelsCount - 1)].data());
     // Read by run.sh at start.
