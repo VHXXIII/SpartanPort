@@ -441,6 +441,10 @@ void ImageTab() {
     const int iw = s.image_width, ih = s.image_height, ww = s.window_width, wh = s.window_height;
     const bool downscaling = iw > ww || ih > wh;
     const bool rcas_blocked = s.rcas && !s.rcas_applied;
+    if (s.upscaler != SpartanSettings::UpscalerOff) {
+        DisabledText(s.temporal_applied ? "Temporal anti-aliasing is running."
+                                        : "Temporal anti-aliasing is selected but not running (see last_run.log).");
+    }
     Separator("Anti-aliasing");
     if (BeginRows("##anti_aliasing")) {
         ChoiceRow("Anti-aliasing", s.anti_aliasing, G::AntiAliasingNames.data(), nullptr, G::AntiAliasingCount,

@@ -95,6 +95,8 @@ struct Values {
     /// Set by the presenter: the anti-aliasing pass ran on the last frame (a mode that could not be
     /// set up on this GPU falls back to off).
     std::atomic<bool> aa_applied{false};
+    /// Set by the temporal upscaler: TAA or FSR ran on the last frame (the menu says when it did not).
+    std::atomic<bool> temporal_applied{false};
     /// Set by the presenter: sharpening ran on the last frame (it needs FSR 1 when the game's
     /// image is smaller than the window).
     std::atomic<bool> rcas_applied{false};

@@ -331,6 +331,16 @@ bool TemporalUpscaler::OnFrameStart() {
     applied_upscaler = upscaler;
     last_active = active;
     last_jitter = jitter_on;
+    SpartanSettings::Get().temporal_applied = dispatched_last_frame;
+    if (SpartanSettings::Get().upscaler != SpartanSettings::UpscalerOff && ++status_frames >= 300) {
+        // One line every few seconds: why a selected TAA or FSR does (not) run (last_run.log).
+        std::printf("Temporal AA status: mode=%s ran_last_frame=%d active=%d failed=%d camera_ready=%d "
+                    "trigger_seen=%u scaled_session=%d\n",
+                    SpartanSettings::UpscalerName(SpartanSettings::Get().upscaler), int(dispatched_last_frame),
+                    int(Active()), int(failed), int(camera_motion.Ready()), trigger_seen, int(Scaled()));
+        status_frames = 0;
+        trigger_seen = 0;
+    }
     dispatched_last_frame = false;
 
     // The display pass of an upscaled frame reads the upscaled UI image.
@@ -358,6 +368,9 @@ bool TemporalUpscaler::OnFrameStart() {
 }
 
 void TemporalUpscaler::OnDispatch(u64 cs_hash) {
+    if (cs_hash == trigger_hash) {
+        ++trigger_seen;
+    }
     if (cs_hash != trigger_hash || done_this_frame || failed || Scaled()) {
         return;
     }

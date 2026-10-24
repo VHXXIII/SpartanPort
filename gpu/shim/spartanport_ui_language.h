@@ -141,6 +141,8 @@ inline constexpr std::pair<std::string_view, const char*> ChineseText[] = {
     {"Right stick style", "右摇杆模式"},
     {"Shader cache", "着色器缓存"},
     {"Anti-aliasing", "抗锯齿"},
+    {"Temporal anti-aliasing is running.", "时间性抗锯齿正在运行。"},
+    {"Temporal anti-aliasing is selected but not running (see last_run.log).", "已选择时间性抗锯齿，但未运行（见 last_run.log）。"},
     {"Smooths jagged edges. FXAA is cheap and a little soft; SMAA keeps the picture sharper and costs a bit more. Both also touch the HUD slightly.", "平滑锯齿边缘。FXAA 开销小但画面略软；SMAA 画面更锐利，开销稍大。两者也会轻微影响 HUD。"},
     {"Anti-aliasing is not active: this graphics card could not set it up.", "抗锯齿未生效：此显卡无法启用。"},
     {"Sharpening", "锐化"},
