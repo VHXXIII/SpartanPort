@@ -487,6 +487,7 @@ DISPLAY_MODES = [('windowed', ('Windowed',)), ('borderless', ('Borderless',)), (
 AUDIO_CHANNELS = [('auto', ('Automatic',)), ('stereo', ('Stereo',)), ('5.1', ('5.1 surround',)),
                   ('7.1', ('7.1 surround',))]
 ANTI_ALIASING = [('off', ('Off',)), ('fxaa', ('FXAA',)), ('smaa', ('SMAA',))]
+TEMPORAL_AA = [('off', ('Off',)), ('taa', ('TAA',)), ('fsr3', ('FSR 3.1 (Native AA)',))]
 ANISOTROPY = [('0', ('Game default',)), ('2', ('2x',)), ('4', ('4x',)), ('8', ('8x',)), ('16', ('16x',))]
 FPS_LIMITS = [('30', ('30',)), ('60', ('60',)), ('100', ('100',)), ('120', ('120',)), ('144', ('144',)), ('180', ('180',)), ('240', ('240',)), ('0', ('Unlimited',))]
 # The sidebar's pages, top to bottom, and the methods that refresh a page's lists when it is shown.
@@ -494,7 +495,7 @@ PAGES = ('home', 'graphics', 'performance', 'game', 'controls', 'mods', 'trophie
 PAGE_REFRESH = {'home': ('refresh_status',), 'game': ('refresh_game_patches',), 'mods': ('refresh_lists',),
                 'trophies': ('refresh_trophies',)}
 UI_SCALES = [('auto', ('Auto',)), ('1', ('1x',)), ('2', ('2x',))]
-APP_DEFAULTS = {'ui_language': 'en', 'ui_scale': 'auto', 'game_dir': os.environ.get('SPARTAN_GAME_DIR', str(PORT_DIR.parent / 'CUSA01623') if WINDOWS else ''), 'update_dir': '', 'experimental_upscaler': False, 'taa': False,
+APP_DEFAULTS = {'ui_language': 'en', 'ui_scale': 'auto', 'game_dir': os.environ.get('SPARTAN_GAME_DIR', str(PORT_DIR.parent / 'CUSA01623') if WINDOWS else ''), 'update_dir': '', 'experimental_upscaler': False, 'temporal_aa': 'off',
                 'video_backend': 'auto', 'gamemode': False, 'mangohud': False, 'desktop_integration': True, 'user_dir': '',
                 'mods_dir': '', 'mods_enabled': True, 'patches_dir': '', 'language': '1',
                 'hdr': False, 'draw_pipe': '', 'readbacks': '', 'no_msaa': '', 'stream_memory': 'cached',
@@ -1223,12 +1224,14 @@ def game_environment(s):
     # Temporal upscaling is parked (build_graphics): a switch saved on by 2.1.8 has no control left to
     # turn it off, so it is ignored until the upscaler section comes back.
     env['SPARTAN_EXPERIMENTAL_UPSCALER'] = '0'
-    # The one exception: the native-resolution TAA the player switched on (Graphics > Experimental). Only
-    # that mode is selected, by the environment, so spartanport.ini's upscaler key is never needed.
-    if s.get('taa') is True:
+    # The one exception: a temporal anti-aliasing the player chose (Graphics > Experimental), always at
+    # native resolution (preset 0, Native AA: no downscaling). Only that mode is selected, by the
+    # environment, so spartanport.ini's upscaler key is never needed and FSR 4 / DLSS stay parked.
+    if s.get('temporal_aa') in ('taa', 'fsr3'):
         env['SPARTAN_EXPERIMENTAL_UPSCALER'] = '1'
-        env['SPARTAN_UPSCALER'] = 'taa'
-        env.pop('SPARTAN_RENDER_RES', None)  # TAA needs the live resolution path
+        env['SPARTAN_UPSCALER'] = s['temporal_aa']
+        env['SPARTAN_UPSCALE_PRESET'] = '0'
+        env.pop('SPARTAN_RENDER_RES', None)  # temporal modes need the live resolution path
     if s.get('update_dir'):
         env['SPARTAN_PATCH_DIR'] = s['update_dir']
     if not WINDOWS:
@@ -1963,10 +1966,11 @@ class Launcher:
         # Temporal upscaling is parked until its image quality is validated; only the native-resolution
         # TAA can be tried, behind this switch.
         self.section(f, _('Experimental'))
-        self.check(f, 'taa', 'app', _('Temporal anti-aliasing (TAA)'),
-                   _('Off (default). Smooths edges and shimmering using previous frames, at native resolution. '
-                     'Not validated for this game yet: expect possible ghosting or flicker, and some extra GPU cost. '
-                     'Takes effect after restarting the game.'), restart=True)
+        self.row(f, _('Temporal anti-aliasing'), self.choice(f, 'temporal_aa', 'app', TEMPORAL_AA),
+                 _('Off (default). Smooths edges and shimmering using previous frames, at native resolution '
+                   '(no downscaling). TAA is the game port\'s own; FSR 3.1 uses AMD\'s algorithm in its Native AA mode, '
+                   'on any graphics card. Neither is validated for this game yet: expect possible ghosting or '
+                   'flicker, and some extra GPU cost. Takes effect after restarting the game.'), restart=True)
         # self.section(f, _('Experimental'))
         # self.check(f, 'experimental_upscaler', 'app', _('Enable the upscaler (experimental)'),
         #            _('Off (default): the game runs without temporal upscaling; FSR 3.1 and TAA need this switch on. '
