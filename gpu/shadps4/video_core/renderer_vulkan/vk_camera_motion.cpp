@@ -329,7 +329,9 @@ void CameraMotion::OnScenePrepass(VideoCore::ImageId depth, std::array<float, 4>
     }
 }
 
-void CameraMotion::OnCameraCandidate(const float* data, u32 size_bytes, u32 width, u32 height) {
+void CameraMotion::OnCameraCandidate(const float* data, u32 size_bytes, u32 width, u32 height,
+                                     u32 source) {
+    ++scan_sources[std::min(source, 2u)];
     if (size_bytes < 16 * sizeof(float)) {
         return;
     }

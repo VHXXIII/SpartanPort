@@ -67,6 +67,12 @@ public:
     [[nodiscard]] std::array<u32, 2> TakeScanCounts() noexcept {
         return {std::exchange(scan_draws, 0u), std::exchange(scan_hits, 0u)};
     }
+    /// Vertex buffers scanned for the camera since the last call: ring, guest address, user data.
+    [[nodiscard]] std::array<u32, 3> TakeScanSources() noexcept {
+        const auto value = scan_sources;
+        scan_sources = {};
+        return value;
+    }
     /// The camera is one view-projection matrix (God of War III), not the 864 byte constants.
     [[nodiscard]] bool ViewProjectionCamera() const noexcept {
         return vp_current_valid;
@@ -97,7 +103,8 @@ public:
 
     /// A vertex constant buffer of the pre-pass: counted when its first 16 floats are a
     /// view-projection for a screen of `width` x `height`.
-    void OnCameraCandidate(const float* data, u32 size_bytes, u32 width, u32 height);
+    void OnCameraCandidate(const float* data, u32 size_bytes, u32 width, u32 height,
+                           u32 source = 0);
 
     /// Picks this frame's camera (once per frame; the previous one is kept). False without one.
     bool ResolveViewProjection();
@@ -149,6 +156,7 @@ private:
     std::array<float, 4> vp_viewport{1.0f, -1.0f, 0.0f, 0.0f};
     std::array<float, 2> vp_depth{1.0f, 0.0f}; ///< depth scale, offset
     u32 vp_frames = 0, scan_draws = 0, scan_hits = 0;
+    std::array<u32, 3> scan_sources{}; ///< buffers scanned: ring, guest address, user data
     bool scene_open = false, tally_has_entries = false;
     u32 miss_streak = 0, scenes_missed = 0, open_displays = 0;
     vk::UniqueDescriptorSetLayout vp_desc_layout;

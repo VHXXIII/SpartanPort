@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <set>
 #include <string>
 
 #include <vk_mem_alloc.h>
@@ -341,12 +342,13 @@ bool TemporalUpscaler::OnFrameStart() {
     if (SpartanSettings::Get().upscaler != SpartanSettings::UpscalerOff && ++status_frames >= 300) {
         // One line every few seconds: why a selected TAA or FSR does (not) run (last_run.log).
         const auto scan = camera_motion.TakeScanCounts();
+        const auto sources = camera_motion.TakeScanSources();
         std::printf("Temporal AA status: mode=%s ran_last_frame=%d active=%d failed=%d camera_ready=%d "
-                    "camera_frames=%u prepass_draws=%u camera_buffers=%u trigger_seen=%u composite_seen=%u ldr_runs=%u skip=%s scaled_session=%d\n",
+                    "camera_frames=%u prepass_draws=%u camera_buffers=%u trigger_seen=%u composite_seen=%u ldr_runs=%u skip=%s scaled_session=%d scanned_ring=%u scanned_guest=%u scanned_flat=%u\n",
                     SpartanSettings::UpscalerName(SpartanSettings::Get().upscaler), int(dispatched_last_frame),
                     int(Active()), int(failed), int(camera_motion.CameraHistory()),
                     camera_motion.TakeCameraFrames(), scan[0], scan[1], trigger_seen, composite_seen, ldr_runs,
-                    skip_reason, int(Scaled()));
+                    skip_reason, int(Scaled()), sources[0], sources[1], sources[2]);
         status_frames = 0;
         trigger_seen = 0;
         composite_seen = 0;
@@ -1351,16 +1353,20 @@ void TemporalUpscaler::RunLdr() {
     auto& depth = texture_cache.GetImage(camera_motion.Depth());
     const u32 w = color.info.size.width, h = color.info.size.height;
     const auto wanted = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
-    if (color.info.pixel_format != vk::Format::eR8G8B8A8Srgb ||
-        depth.info.size.width != w || depth.info.size.height != h ||
-        (color.usage_flags & wanted) != wanted) {
-        static bool warned = false;
-        if (!warned) {
-            warned = true;
-            std::printf("Upscaler: scene colour %s %ux%u (usage %s), depth %ux%u not usable\n",
-                        vk::to_string(color.info.pixel_format).c_str(), w, h,
-                        vk::to_string(color.usage_flags).c_str(), depth.info.size.width,
-                        depth.info.size.height);
+    // The composite writes an sRGB target (decoded to linear on sampling), or, in some scenes, a
+    // plain 8-bit UNORM one that already holds display values: those are processed as they are.
+    const bool srgb_color = color.info.pixel_format == vk::Format::eR8G8B8A8Srgb;
+    const bool unorm_color = color.info.pixel_format == vk::Format::eR8G8B8A8Unorm;
+    if ((!srgb_color && !unorm_color) || depth.info.size.width != w ||
+        depth.info.size.height != h || (color.usage_flags & wanted) != wanted) {
+        static std::set<std::string> warned;
+        char text[512];
+        std::snprintf(text, sizeof(text), "%s %ux%u depth %ux%u usage %s",
+                      vk::to_string(color.info.pixel_format).c_str(), w, h, depth.info.size.width,
+                      depth.info.size.height, vk::to_string(color.usage_flags).c_str());
+        const std::string key = text;
+        if (warned.insert(key).second && warned.size() <= 8) {
+            std::printf("Upscaler: scene colour %s not usable\n", key.c_str());
         }
         skip_reason = "bad_images";
         return;
@@ -1378,7 +1384,8 @@ void TemporalUpscaler::RunLdr() {
     const auto depth_format = depth.info.pixel_format;
     const auto depth_view = CachedView(depth, depth_format, vk::ImageAspectFlagBits::eDepth);
     // The sRGB view decodes to linear on sampling, the blit back encodes again.
-    const auto color_view = CachedView(color, vk::Format::eR8G8B8A8Srgb,
+    const auto color_view = CachedView(color, srgb_color ? vk::Format::eR8G8B8A8Srgb
+                                                         : vk::Format::eR8G8B8A8Unorm,
                                        vk::ImageAspectFlagBits::eColor);
 
     scheduler.EndRendering();

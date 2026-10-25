@@ -2236,7 +2236,7 @@ void Rasterizer::BindBuffers(const Shader::Info& stage, const PreparedStage* pre
                 if (scan_camera && stage.sw_stage == Shader::SwStage::Vertex && ring->size >= 64) {
                     camera_motion->OnCameraCandidate(
                         reinterpret_cast<const float*>(constant_ring->Data(ring->offset)),
-                        u32(ring->size), scan_size[0], scan_size[1]);
+                        u32(ring->size), scan_size[0], scan_size[1], 0);
                 }
                 push_data.AddOffset(binding.buffer, 0);
             }
@@ -2252,6 +2252,12 @@ void Rasterizer::BindBuffers(const Shader::Info& stage, const PreparedStage* pre
                 if (FrameCapture::Active()) {
                     FrameCapture::Buffer(stage.pgm_hash, binding.buffer, 0,
                                          stage.FlatUserData().data(), ubo_size);
+                }
+                // The camera may also arrive as user data registers (a vertex shader variant).
+                if (scan_camera && stage.sw_stage == Shader::SwStage::Vertex && ubo_size >= 64) {
+                    camera_motion->OnCameraCandidate(
+                        reinterpret_cast<const float*>(stage.FlatUserData().data()), ubo_size,
+                        scan_size[0], scan_size[1], 2);
                 }
                 const u64 offset =
                     vk_buffer.Copy(stage.FlatUserData().data(), ubo_size, alignment);
@@ -2305,7 +2311,7 @@ void Rasterizer::BindBuffers(const Shader::Info& stage, const PreparedStage* pre
                 memory->ClampRangeSize(vsharp.base_address, 64) >= 64) {
                 camera_motion->OnCameraCandidate(
                     reinterpret_cast<const float*>(vsharp.base_address), u32(vsharp.GetSize()),
-                    scan_size[0], scan_size[1]);
+                    scan_size[0], scan_size[1], 1);
             }
             // Object motion research: the vertex shader buffers of G-buffer draws.
             if (FrameCapture::Active() && gbuffer_draw && stage.sw_stage == Shader::SwStage::Vertex &&
