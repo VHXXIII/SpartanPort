@@ -376,6 +376,36 @@ void CameraMotion::OnCameraCandidate(const float* data, u32 size_bytes, u32 widt
     }
 }
 
+void CameraMotion::RecordMotionVp(vk::CommandBuffer cmdbuf, vk::ImageView depth_view,
+                                  vk::ImageView motion_view, u32 width, u32 height) {
+    const VpPushConstants push{
+        .reproject = vp_reprojection,
+        .size = {float(width), float(height)},
+        .jitter = jitter,
+        .depth_range = vp_depth,
+        .viewport = vp_viewport,
+    };
+    const vk::DescriptorImageInfo depth_info{.imageView = depth_view,
+                                             .imageLayout = vk::ImageLayout::eGeneral};
+    const vk::DescriptorImageInfo motion_info{.imageView = motion_view,
+                                              .imageLayout = vk::ImageLayout::eGeneral};
+    const std::array<vk::WriteDescriptorSet, 2> writes = {{
+        {.dstBinding = 0,
+         .descriptorCount = 1,
+         .descriptorType = vk::DescriptorType::eSampledImage,
+         .pImageInfo = &depth_info},
+        {.dstBinding = 1,
+         .descriptorCount = 1,
+         .descriptorType = vk::DescriptorType::eStorageImage,
+         .pImageInfo = &motion_info},
+    }};
+    cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, *vp_pipeline);
+    cmdbuf.pushDescriptorSetKHR(vk::PipelineBindPoint::eCompute, *vp_pipeline_layout, 0, writes);
+    cmdbuf.pushConstants(*vp_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(push),
+                         &push);
+    cmdbuf.dispatch((width + 7) / 8, (height + 7) / 8, 1);
+}
+
 bool CameraMotion::ResolveViewProjection() {
     if (vp_resolved) {
         return vp_current_valid;
