@@ -16,7 +16,7 @@ layout(push_constant) uniform Params {
     uint pad; // bits 0-7: diagnostic output (SPARTAN_TAA_DIAGNOSTICS); 8-12: A/B switches; 24: view-projection depth
     vec4 proj;
     vec4 prev_proj;
-    vec4 previous_z;
+    vec4 previous_z; // view-projection mode: the game's viewport (x scale, y scale, x offset, y offset)
     mat4 reproject; // view-projection mode (pad bit 24): previous VP * inverse(current VP)
 };
 
@@ -37,8 +37,10 @@ float expectedPreviousDepth(float depth, vec2 source, ivec2 size) {
     vec2 uv = (source + 0.5 - jitter) / vec2(size);
     vec2 ndc = vec2(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
     if ((pad & (1u << 24)) != 0u) {
-        // God of War III: one matrix from this frame's clip space to the previous one.
-        vec4 previous = reproject * vec4(ndc, depth, 1.0);
+        // God of War III: one matrix from this frame's clip space to the previous one, through
+        // the game's viewport (its scale signs carry the screen's axis directions).
+        vec4 previous = reproject * vec4((source + 0.5 - jitter - previous_z.zw) / previous_z.xy,
+                                         depth, 1.0);
         if (previous.w <= 1e-6) return -1.0;
         return previous.z / previous.w;
     }

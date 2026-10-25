@@ -91,7 +91,8 @@ public:
                       u32 width, u32 height);
 
     /// The depth pre-pass (no colour target, a screen-sized depth): its depth is the scene depth.
-    void OnScenePrepass(VideoCore::ImageId depth);
+    /// `viewport`: the game's x scale, y scale, x offset, y offset (screen = offset + scale * ndc).
+    void OnScenePrepass(VideoCore::ImageId depth, std::array<float, 4> viewport);
 
     /// A vertex constant buffer of the pre-pass: counted when its first 16 floats are a
     /// view-projection for a screen of `width` x `height`.
@@ -139,6 +140,7 @@ private:
     CameraVp::Matrix vp_current{}, vp_previous{}, vp_reprojection{};
     bool vp_current_valid = false, vp_previous_valid = false, vp_resolved = false;
     u32 vp_flip = 0;
+    std::array<float, 4> vp_viewport{1.0f, -1.0f, 0.0f, 0.0f};
     u32 vp_frames = 0, scan_draws = 0, scan_hits = 0;
     vk::UniqueDescriptorSetLayout vp_desc_layout;
     vk::UniquePipelineLayout vp_pipeline_layout;

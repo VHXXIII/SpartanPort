@@ -290,7 +290,18 @@ void Rasterizer::PrepareRenderState(const GraphicsPipeline* pipeline) {
                         logged, depth_w, depth_h, u32(regs.num_indices), u32(key.mrt_mask));
         }
         if (no_color && depth_w >= 1280 && depth_h >= 720 && depth_w * 10 > depth_h * 13) {
-            camera_motion->OnScenePrepass(db_desc.first);
+            const auto& vp = regs.viewports[0];
+            const auto& vp_ctl = regs.viewport_control;
+            static u32 depth_range_logs = 0;
+            if (depth_range_logs < 3 && depth_range_logs++ >= 0) {
+                std::printf("Camera motion: depth range scale %g offset %g (scale enable %u)\n",
+                            vp.zscale, vp.zoffset, u32(vp_ctl.zscale_enable));
+            }
+            camera_motion->OnScenePrepass(
+                db_desc.first, {vp_ctl.xscale_enable ? vp.xscale : 1.0f,
+                                vp_ctl.yscale_enable ? vp.yscale : 1.0f,
+                                vp_ctl.xoffset_enable ? vp.xoffset : 0.0f,
+                                vp_ctl.yoffset_enable ? vp.yoffset : 0.0f});
             scan_camera = db_desc.first == camera_motion->Depth();
             scan_size = {depth_w, depth_h};
         }

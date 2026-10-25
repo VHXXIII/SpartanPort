@@ -36,7 +36,7 @@ struct VpPushConstants {
     CameraVp::Matrix reproject;
     std::array<float, 2> size;
     std::array<float, 2> jitter;
-    u32 flip;
+    std::array<float, 4> viewport;
 };
 
 /// a * b for 3x4 affine matrices (rows [R | t]).
@@ -217,8 +217,8 @@ float CameraMotion::Near() const noexcept {
 std::array<std::array<float, 4>, 3> CameraMotion::TaaDepthParameters() const noexcept {
     if (vp_current_valid) {
         // Depth 0 at the near plane and 1 at infinity: only the sky threshold (z scale 1) is
-        // read from these, the rest is in Reprojection().
-        return {{{1.0f, 1.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 0.0f}}};
+        // read from the first two; the third is the viewport, the rest is in Reprojection().
+        return {{{1.0f, 1.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 0.0f}, vp_viewport}};
     }
     const auto transform = Multiply(previous.view, current.inv_view);
     return {current.proj, previous.proj,
@@ -302,10 +302,20 @@ void CameraMotion::OnGBufferPass(VideoCore::ImageId depth) {
     depth_id = depth;
 }
 
-void CameraMotion::OnScenePrepass(VideoCore::ImageId depth) {
+void CameraMotion::OnScenePrepass(VideoCore::ImageId depth, std::array<float, 4> viewport) {
     ++scan_draws;
     if (!depth_id) {
         depth_id = depth;
+        vp_viewport = viewport;
+        // SPARTAN_VP_FLIP=x|y|xy mirrors an axis, for calibration against the picture.
+        if (vp_flip & 1u) vp_viewport[0] = -vp_viewport[0];
+        if (vp_flip & 2u) vp_viewport[1] = -vp_viewport[1];
+        static std::array<float, 4> logged{};
+        if (viewport != logged) {
+            logged = viewport;
+            std::printf("Camera motion: viewport scale %g %g offset %g %g\n", viewport[0],
+                        viewport[1], viewport[2], viewport[3]);
+        }
     }
 }
 
@@ -350,7 +360,7 @@ void CameraMotion::RecordMotionVp(vk::CommandBuffer cmdbuf, vk::ImageView depth_
         .reproject = vp_reprojection,
         .size = {float(width), float(height)},
         .jitter = jitter,
-        .flip = vp_flip,
+        .viewport = vp_viewport,
     };
     const vk::DescriptorImageInfo depth_info{.imageView = depth_view,
                                              .imageLayout = vk::ImageLayout::eGeneral};
