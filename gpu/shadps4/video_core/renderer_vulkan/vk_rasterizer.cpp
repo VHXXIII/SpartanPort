@@ -1244,10 +1244,15 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
     // triangle (3 indices) or a strip quad (4); its sky and sun glow are quads of 6 indices that
     // belong to the world and must move with the jitter like the rest of the scene.
     draw_jitter = {};
-    if (upscaler->Enabled() && db_desc.first && upscaler->JitterDepth(db_desc.first) &&
-        (regs.num_indices > (camera_motion->ViewProjectionCamera() ? 4u : 6u) ||
-         regs.num_instances.NumInstances() > 1)) {
-        draw_jitter = upscaler->Jitter();
+    if (upscaler->Enabled() && db_desc.first && upscaler->JitterDepth(db_desc.first)) {
+        if (regs.num_indices > (camera_motion->ViewProjectionCamera() ? 4u : 6u) ||
+            regs.num_instances.NumInstances() > 1) {
+            draw_jitter = upscaler->Jitter();
+            upscaler->NoteJitterDraw(regs.IsClipDisabled() ? 2u
+                                     : (draw_jitter[0] != 0.0f || draw_jitter[1] != 0.0f) ? 0u : 3u);
+        } else {
+            upscaler->NoteJitterDraw(1);
+        }
     }
     UpdateDynamicState(pipeline, is_indexed);
     MarkPass(pipeline, state);
@@ -1385,6 +1390,8 @@ void Rasterizer::DrawIndirectRecord(const GraphicsPipeline* pipeline, bool is_in
     draw_jitter = {};
     if (upscaler->Enabled() && db_desc.first && upscaler->JitterDepth(db_desc.first)) {
         draw_jitter = upscaler->Jitter();
+        upscaler->NoteJitterDraw(Regs().IsClipDisabled() ? 2u
+                                 : (draw_jitter[0] != 0.0f || draw_jitter[1] != 0.0f) ? 0u : 3u);
     }
     UpdateDynamicState(pipeline, is_indexed);
     MarkPass(pipeline, state);

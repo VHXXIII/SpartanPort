@@ -95,6 +95,11 @@ public:
     [[nodiscard]] std::array<float, 2> Jitter() const noexcept {
         return done_this_frame || composite_passed ? std::array<float, 2>{} : jitter;
     }
+    /// Status line: scene draws by what happened to their jitter (0 shifted, 1 too small an
+    /// index count, 2 clipping disabled, 3 the jitter was zero).
+    void NoteJitterDraw(u32 kind) noexcept {
+        ++jitter_draws[kind & 3];
+    }
     /// The composite of the scene was drawn since the last frame start (a repeated display
     /// pass has none).
     [[nodiscard]] bool CompositePassed() const noexcept {
@@ -214,7 +219,9 @@ private:
     u32 ldr_runs = 0;       // upscales of the 8-bit scene colour since then
     const char* skip_reason = "none"; // why the last queued upscale did not run
     bool composite_pending = false;
-    bool composite_passed = false; ///< the scene is finished this frame: nothing after it is jittered
+    bool composite_passed = false;
+    std::array<u32, 4> jitter_draws{};
+    bool jitter_enabled = false; ///< the scene is finished this frame: nothing after it is jittered
     u64 composite_ps = 0x0c20ededc9e7c40c; // SPARTAN_UPSCALER_COMPOSITE_PS overrides it
     bool last_active = false, last_jitter = false;
 
