@@ -39,10 +39,11 @@ float expectedPreviousDepth(float depth, vec2 source, ivec2 size) {
     if ((pad & (1u << 24)) != 0u) {
         // God of War III: one matrix from this frame's clip space to the previous one, through
         // the game's viewport (its scale signs carry the screen's axis directions).
+        // proj.xy: the depth scale and offset (depth = offset + scale * clip z / w).
         vec4 previous = reproject * vec4((source + 0.5 - jitter - previous_z.zw) / previous_z.xy,
-                                         depth, 1.0);
+                                         (depth - proj.y) / proj.x, 1.0);
         if (previous.w <= 1e-6) return -1.0;
-        return previous.z / previous.w;
+        return proj.y + proj.x * previous.z / previous.w;
     }
     float z = proj.w / min(depth - proj.z, -1e-8);
     float prev_z = dot(previous_z, vec4(ndc * z / proj.xy, z, 1.0));

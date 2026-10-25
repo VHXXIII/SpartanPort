@@ -15,6 +15,7 @@ layout(push_constant) uniform Constants {
     mat4 reproject; // column-major, current clip (ndc.xy, depth, 1) to previous clip
     vec2 size;      // pixels
     vec2 jitter;    // viewport shift of the depth in pixels (x right, y down)
+    vec2 depth_range; // the game's depth scale and offset: depth = offset + scale * clip z / w
     vec4 viewport;  // the game's viewport: x scale, y scale, x offset, y offset (screen = offset + scale * ndc)
 };
 
@@ -28,7 +29,7 @@ void main() {
     // framebuffer's pixels. The viewport maps ndc to pixels (its signs carry the axis directions).
     const vec2 position = vec2(pixel) + 0.5 - jitter;
     const vec2 ndc = (position - viewport.zw) / viewport.xy;
-    const vec4 previous = reproject * vec4(ndc, depth, 1.0);
+    const vec4 previous = reproject * vec4(ndc, (depth - depth_range.y) / depth_range.x, 1.0);
     vec2 motion;
     if (previous.w > 1e-6) {
         const vec2 previous_position = viewport.zw + viewport.xy * (previous.xy / previous.w);

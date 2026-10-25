@@ -19,6 +19,7 @@
 #include "ffx_vk_portable.h"
 #include "video_core/host_shaders/upscale_merge_comp.h"
 #include "video_core/host_shaders/upscale_reactive_comp.h"
+#include "video_core/host_shaders/depth_remap_comp.h"
 #include "video_core/host_shaders/ldr_alpha_comp.h"
 #include "video_core/host_shaders/taa_comp.h"
 #include "video_core/host_shaders/taa_sharpen_comp.h"
@@ -697,6 +698,21 @@ void TemporalUpscaler::CreatePipelines() {
             .addressModeV = vk::SamplerAddressMode::eClampToEdge,
             .addressModeW = vk::SamplerAddressMode::eClampToEdge}));
         taa_pipeline = compute(TAA_COMP, *taa_pipeline_layout);
+    }
+    {
+        const std::array<vk::DescriptorSetLayoutBinding, 2> bindings{{
+            {.binding = 0, .descriptorType = vk::DescriptorType::eSampledImage,
+             .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eCompute},
+            {.binding = 1, .descriptorType = vk::DescriptorType::eStorageImage,
+             .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eCompute}}};
+        depth_remap_desc_layout = Check(device.createDescriptorSetLayoutUnique({
+            .flags = vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR,
+            .bindingCount = u32(bindings.size()), .pBindings = bindings.data()}));
+        const vk::PushConstantRange push{vk::ShaderStageFlagBits::eCompute, 0, 8};
+        depth_remap_pipeline_layout = Check(device.createPipelineLayoutUnique({
+            .setLayoutCount = 1, .pSetLayouts = &*depth_remap_desc_layout,
+            .pushConstantRangeCount = 1, .pPushConstantRanges = &push}));
+        depth_remap_pipeline = compute(DEPTH_REMAP_COMP, *depth_remap_pipeline_layout);
     }
     {
         // The game's alpha into the RGBA16F result: a sampled scene colour and a storage image.
@@ -1403,14 +1419,60 @@ void TemporalUpscaler::RunLdr() {
         RecordTaa(cmdbuf, color_view, depth_view);
         dispatched = true;
     } else {
+        // FSR wants plain clip z / w: the game's depth range (0.5..1) is remapped into an R32F image.
+        const auto device = instance.GetDevice();
+        if (depth_ndc_width != w || depth_ndc_height != h) {
+            scheduler.WaitSubmitted(); // `cmdbuf` stays open
+            depth_ndc_view.reset();
+            depth_ndc_image = VideoCore::UniqueImage(device, instance.GetAllocator());
+            depth_ndc_image.Create(vk::ImageCreateInfo{
+                .imageType = vk::ImageType::e2D, .format = vk::Format::eR32Sfloat,
+                .extent = {w, h, 1}, .mipLevels = 1, .arrayLayers = 1,
+                .samples = vk::SampleCountFlagBits::e1, .tiling = vk::ImageTiling::eOptimal,
+                .usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled,
+                .initialLayout = vk::ImageLayout::eUndefined});
+            depth_ndc_view = Check(device.createImageViewUnique({
+                .image = vk::Image(depth_ndc_image), .viewType = vk::ImageViewType::e2D,
+                .format = vk::Format::eR32Sfloat,
+                .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1}}));
+            depth_ndc_width = w;
+            depth_ndc_height = h;
+        }
+        own_barrier(vk::Image(depth_ndc_image), vk::ImageLayout::eUndefined, all,
+                    vk::AccessFlagBits2::eNone, vk::ImageLayout::eGeneral,
+                    vk::PipelineStageFlagBits2::eComputeShader,
+                    vk::AccessFlagBits2::eShaderWrite);
+        {
+            const vk::DescriptorImageInfo depth_info{.imageView = depth_view,
+                                                     .imageLayout = vk::ImageLayout::eGeneral};
+            const vk::DescriptorImageInfo out_info{.imageView = *depth_ndc_view,
+                                                   .imageLayout = vk::ImageLayout::eGeneral};
+            const std::array<vk::WriteDescriptorSet, 2> writes{{
+                {.dstBinding = 0, .descriptorCount = 1,
+                 .descriptorType = vk::DescriptorType::eSampledImage, .pImageInfo = &depth_info},
+                {.dstBinding = 1, .descriptorCount = 1,
+                 .descriptorType = vk::DescriptorType::eStorageImage, .pImageInfo = &out_info}}};
+            const auto range = camera_motion.DepthRange();
+            cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, *depth_remap_pipeline);
+            cmdbuf.pushDescriptorSetKHR(vk::PipelineBindPoint::eCompute,
+                                        *depth_remap_pipeline_layout, 0, writes);
+            cmdbuf.pushConstants(*depth_remap_pipeline_layout, vk::ShaderStageFlagBits::eCompute,
+                                 0, sizeof(range), &range);
+            cmdbuf.dispatch((w + 7) / 8, (h + 7) / 8, 1);
+        }
+        own_barrier(vk::Image(depth_ndc_image), vk::ImageLayout::eGeneral,
+                    vk::PipelineStageFlagBits2::eComputeShader,
+                    vk::AccessFlagBits2::eShaderWrite, vk::ImageLayout::eGeneral, all,
+                    vk::AccessFlagBits2::eShaderRead);
         FfxVkPortableUpscaleDispatchInfo info{};
         info.structSize = sizeof(info);
         info.commandBuffer = cmdbuf;
         info.color = Describe(color.GetImage(), color.info.pixel_format, w, h, color.usage_flags,
                               vk::ImageAspectFlagBits::eColor,
                               FFX_VK_PORTABLE_RESOURCE_STATE_GENERIC_READ);
-        info.depth = Describe(depth.GetImage(), depth_format, w, h, depth.usage_flags,
-                              vk::ImageAspectFlagBits::eDepth,
+        info.depth = Describe(vk::Image(depth_ndc_image), vk::Format::eR32Sfloat, w, h,
+                              vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled,
+                              vk::ImageAspectFlagBits::eColor,
                               FFX_VK_PORTABLE_RESOURCE_STATE_GENERIC_READ);
         info.motionVectors = Describe(vk::Image(motion_image), vk::Format::eR16G16Sfloat, w, h,
                                       vk::ImageUsageFlagBits::eStorage |

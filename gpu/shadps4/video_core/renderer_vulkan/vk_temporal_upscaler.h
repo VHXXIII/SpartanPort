@@ -292,6 +292,13 @@ private:
     std::array<vk::UniqueImageView, 2> taa_history_views;
     u32 taa_next = 0;
     vk::UniqueSampler taa_sampler;
+    // FSR gets the scene depth as plain clip z / w (the game's range is 0.5..1).
+    vk::UniqueDescriptorSetLayout depth_remap_desc_layout;
+    vk::UniquePipelineLayout depth_remap_pipeline_layout;
+    vk::UniquePipeline depth_remap_pipeline;
+    VideoCore::UniqueImage depth_ndc_image;
+    vk::UniqueImageView depth_ndc_view;
+    u32 depth_ndc_width = 0, depth_ndc_height = 0;
     vk::UniqueDescriptorSetLayout ldr_alpha_desc_layout;
     vk::UniquePipelineLayout ldr_alpha_pipeline_layout;
     vk::UniquePipeline ldr_alpha_pipeline;

@@ -36,6 +36,7 @@ struct VpPushConstants {
     CameraVp::Matrix reproject;
     std::array<float, 2> size;
     std::array<float, 2> jitter;
+    std::array<float, 2> depth_range;
     std::array<float, 4> viewport;
 };
 
@@ -218,7 +219,7 @@ std::array<std::array<float, 4>, 3> CameraMotion::TaaDepthParameters() const noe
     if (vp_current_valid) {
         // Depth 0 at the near plane and 1 at infinity: only the sky threshold (z scale 1) is
         // read from the first two; the third is the viewport, the rest is in Reprojection().
-        return {{{1.0f, 1.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 0.0f}, vp_viewport}};
+        return {{{vp_depth[0], vp_depth[1], 1.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 0.0f}, vp_viewport}};
     }
     const auto transform = Multiply(previous.view, current.inv_view);
     return {current.proj, previous.proj,
@@ -302,11 +303,13 @@ void CameraMotion::OnGBufferPass(VideoCore::ImageId depth) {
     depth_id = depth;
 }
 
-void CameraMotion::OnScenePrepass(VideoCore::ImageId depth, std::array<float, 4> viewport) {
+void CameraMotion::OnScenePrepass(VideoCore::ImageId depth, std::array<float, 4> viewport,
+                                  std::array<float, 2> depth_range) {
     ++scan_draws;
     if (!depth_id) {
         depth_id = depth;
         vp_viewport = viewport;
+        vp_depth = depth_range;
         // SPARTAN_VP_FLIP=x|y|xy mirrors an axis, for calibration against the picture.
         if (vp_flip & 1u) vp_viewport[0] = -vp_viewport[0];
         if (vp_flip & 2u) vp_viewport[1] = -vp_viewport[1];
@@ -360,6 +363,7 @@ void CameraMotion::RecordMotionVp(vk::CommandBuffer cmdbuf, vk::ImageView depth_
         .reproject = vp_reprojection,
         .size = {float(width), float(height)},
         .jitter = jitter,
+        .depth_range = vp_depth,
         .viewport = vp_viewport,
     };
     const vk::DescriptorImageInfo depth_info{.imageView = depth_view,
