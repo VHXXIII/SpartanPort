@@ -306,7 +306,14 @@ void CameraMotion::OnGBufferPass(VideoCore::ImageId depth) {
 void CameraMotion::OnScenePrepass(VideoCore::ImageId depth, std::array<float, 4> viewport,
                                   std::array<float, 2> depth_range) {
     ++scan_draws;
-    if (!depth_id) {
+    if (!scene_open) {
+        // The first pre-pass draw after the last composite: a new scene. (Display passes are not
+        // frame boundaries here: the game repeats frames at 30 fps and may issue the next
+        // pre-pass before the previous frame's display pass.)
+        scene_open = true;
+        open_displays = 0;
+        vp_resolved = false;
+        vp_tally.Clear();
         depth_id = depth;
         vp_viewport = viewport;
         vp_depth = depth_range;
@@ -323,31 +330,48 @@ void CameraMotion::OnScenePrepass(VideoCore::ImageId depth, std::array<float, 4>
 }
 
 void CameraMotion::OnCameraCandidate(const float* data, u32 size_bytes, u32 width, u32 height) {
-    if (size_bytes >= 16 * sizeof(float) && !CameraVp::LooksLikeViewProjection(data, float(width), float(height))) {
-        // A near miss (about the right aspect but not quite orthogonal): log a few, to learn what
-        // the camera looks like when it is not recognised.
-        static u32 near_misses = 0;
-        float v[4];
-        if (near_misses < 12 && CameraVp::Metrics(data, float(width) / float(height), v) &&
-            v[0] < 0.2f && v[1] < 0.2f && v[2] < 0.2f && v[3] < 0.2f &&
-            std::abs(data[0]) + std::abs(data[5]) > 0.1f) {
-            ++near_misses;
-            std::printf("Camera motion: near-miss buffer %u bytes, metrics %.4f %.4f %.4f %.4f, "
-                        "floats %g %g %g %g | %g %g %g %g | %g %g %g %g | %g %g %g %g\n",
-                        size_bytes, v[0], v[1], v[2], v[3], data[0], data[1], data[2], data[3],
-                        data[4], data[5], data[6], data[7], data[8], data[9], data[10], data[11],
-                        data[12], data[13], data[14], data[15]);
-        }
+    if (size_bytes < 16 * sizeof(float)) {
+        return;
     }
-    if (size_bytes >= 16 * sizeof(float) &&
-        CameraVp::LooksLikeViewProjection(data, float(width), float(height))) {
-        vp_tally.Add(data);
+    const u32 floats = size_bytes / sizeof(float);
+    // The camera is normally the first 16 floats; when the scene has none yet, also try the later
+    // 16 byte aligned windows of the buffer (another vertex shader variant, a cut scene).
+    const u32 last_window = tally_has_entries ? 0u : std::min(floats - 16u, 252u);
+    bool found = false;
+    for (u32 offset = 0; offset <= last_window; offset += 4) {
+        const float* m = data + offset;
+        if (!CameraVp::LooksLikeViewProjection(m, float(width), float(height))) {
+            continue;
+        }
+        found = true;
+        vp_tally.Add(m);
+        tally_has_entries = true;
         ++scan_hits;
         const std::array<u32, 2> size{width, height};
         if (size != render_size) {
-            std::printf("Camera motion: scene render size %ux%u (view-projection camera)\n",
-                        width, height);
+            std::printf("Camera motion: scene render size %ux%u (view-projection camera, float offset %u)\n",
+                        width, height, offset);
             render_size = size;
+        }
+        if (offset != 0) {
+            static u32 logged_offsets = 0;
+            if (logged_offsets++ < 8) {
+                std::printf("Camera motion: camera found at float offset %u of a %u byte buffer\n",
+                            offset, size_bytes);
+            }
+        }
+        break;
+    }
+    if (!found && miss_streak >= 2 && !tally_has_entries) {
+        // The camera was not found in the last scenes: log what the pre-pass binds.
+        static u32 dumped = 0;
+        if (dumped < 60) {
+            ++dumped;
+            std::printf("Camera motion: unrecognised buffer %u bytes, floats %g %g %g %g | %g %g %g %g | "
+                        "%g %g %g %g | %g %g %g %g\n",
+                        size_bytes, data[0], data[1], data[2], data[3], data[4], data[5], data[6],
+                        data[7], data[8], data[9], data[10], data[11], data[12], data[13], data[14],
+                        data[15]);
         }
     }
 }
@@ -356,11 +380,20 @@ bool CameraMotion::ResolveViewProjection() {
     if (vp_resolved) {
         return vp_current_valid;
     }
-    vp_resolved = true;
     CameraVp::Matrix best;
-    if (!vp_tally.Best(best)) {
+    if (!scene_open || !vp_tally.Best(best)) {
+        if (scene_open) {
+            ++miss_streak; // a scene without a camera (a menu, a movie, or an unknown layout)
+            scene_open = false;
+            vp_resolved = true;
+        }
         return false;
     }
+    miss_streak = 0;
+    open_displays = 0;
+    vp_resolved = true;
+    scene_open = false;
+    tally_has_entries = false;
     vp_previous = vp_current;
     vp_previous_valid = vp_current_valid;
     vp_current = best;
@@ -373,46 +406,24 @@ bool CameraMotion::ResolveViewProjection() {
     return true;
 }
 
-void CameraMotion::RecordMotionVp(vk::CommandBuffer cmdbuf, vk::ImageView depth_view,
-                                  vk::ImageView motion_view, u32 width, u32 height) {
-    const VpPushConstants push{
-        .reproject = vp_reprojection,
-        .size = {float(width), float(height)},
-        .jitter = jitter,
-        .depth_range = vp_depth,
-        .viewport = vp_viewport,
-    };
-    const vk::DescriptorImageInfo depth_info{.imageView = depth_view,
-                                             .imageLayout = vk::ImageLayout::eGeneral};
-    const vk::DescriptorImageInfo motion_info{.imageView = motion_view,
-                                              .imageLayout = vk::ImageLayout::eGeneral};
-    const std::array<vk::WriteDescriptorSet, 2> writes = {{
-        {.dstBinding = 0,
-         .descriptorCount = 1,
-         .descriptorType = vk::DescriptorType::eSampledImage,
-         .pImageInfo = &depth_info},
-        {.dstBinding = 1,
-         .descriptorCount = 1,
-         .descriptorType = vk::DescriptorType::eStorageImage,
-         .pImageInfo = &motion_info},
-    }};
-    cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, *vp_pipeline);
-    cmdbuf.pushDescriptorSetKHR(vk::PipelineBindPoint::eCompute, *vp_pipeline_layout, 0, writes);
-    cmdbuf.pushConstants(*vp_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(push),
-                         &push);
-    cmdbuf.dispatch((width + 7) / 8, (height + 7) / 8, 1);
-}
-
 void CameraMotion::OnDisplayPass(VideoCore::ImageId frame) {
     if (debug_overlay && frame && depth_id && current.valid && previous.valid) {
         Overlay(frame);
     }
-    ResolveViewProjection(); // keeps the history going when the upscaler did not run this frame
-    if (!frame_has_camera) InvalidateHistory();
+    // A scene (pre-pass) that no composite closed for a few frames is dropped.
+    if (scene_open && ++open_displays >= 3) {
+        scene_open = false;
+        tally_has_entries = false;
+        vp_tally.Clear();
+    }
+    // A display pass without a scene is a repeated frame (30 fps): not a break of the history.
+    // Only several in a row (a menu, a loading screen) drop it.
+    if (frame_has_camera) {
+        scenes_missed = 0;
+    } else if (++scenes_missed >= 4) {
+        InvalidateHistory();
+    }
     frame_has_camera = false;
-    vp_resolved = false;
-    vp_tally.Clear();
-    depth_id = {};
 }
 
 void CameraMotion::Overlay(VideoCore::ImageId frame) {

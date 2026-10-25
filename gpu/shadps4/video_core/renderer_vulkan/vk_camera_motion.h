@@ -149,6 +149,8 @@ private:
     std::array<float, 4> vp_viewport{1.0f, -1.0f, 0.0f, 0.0f};
     std::array<float, 2> vp_depth{1.0f, 0.0f}; ///< depth scale, offset
     u32 vp_frames = 0, scan_draws = 0, scan_hits = 0;
+    bool scene_open = false, tally_has_entries = false;
+    u32 miss_streak = 0, scenes_missed = 0, open_displays = 0;
     vk::UniqueDescriptorSetLayout vp_desc_layout;
     vk::UniquePipelineLayout vp_pipeline_layout;
     vk::UniquePipeline vp_pipeline;

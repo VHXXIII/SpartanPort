@@ -95,6 +95,11 @@ public:
     [[nodiscard]] std::array<float, 2> Jitter() const noexcept {
         return done_this_frame || composite_passed ? std::array<float, 2>{} : jitter;
     }
+    /// The composite of the scene was drawn since the last frame start (a repeated display
+    /// pass has none).
+    [[nodiscard]] bool CompositePassed() const noexcept {
+        return composite_passed;
+    }
 
     // Scaled presets.
 

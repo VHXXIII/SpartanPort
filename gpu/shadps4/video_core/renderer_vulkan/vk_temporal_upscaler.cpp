@@ -401,6 +401,7 @@ void TemporalUpscaler::OnPixelShader(u64 ps_hash, VideoCore::ImageId color) {
     }
     ++composite_seen;
     composite_passed = true;
+    camera_motion.ResolveViewProjection(); // closes the scene: its pre-pass is complete
     if (done_this_frame || failed || Scaled() || !Active()) {
         skip_reason = done_this_frame ? "done" : failed ? "failed" : Scaled() ? "scaled" : "inactive";
         return;

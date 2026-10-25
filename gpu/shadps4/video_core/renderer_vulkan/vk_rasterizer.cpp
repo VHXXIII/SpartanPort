@@ -1082,7 +1082,13 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
                               FrameCapture::IsDisplayBuffer(regs.color_buffers[0].Address());
     const bool new_display_pass = display_draw && !in_display_pass;
     in_display_pass = display_draw;
-    if (camera_motion->Enabled() && new_display_pass) {
+    // The game repeats a finished frame at 30 fps: a display pass without a scene (no composite
+    // since the last one) neither restarts the upscaler nor advances the jitter.
+    const bool repeated_frame = new_display_pass && camera_motion->Enabled() &&
+                                camera_motion->ViewProjectionCamera() && !upscaler->CompositePassed();
+    if (repeated_frame) {
+        camera_motion->OnDisplayPass(cb_descs[0].first);
+    } else if (camera_motion->Enabled() && new_display_pass) {
         scene_started = false;
         camera_motion->OnDisplayPass(cb_descs[0].first);
         if (upscaler->OnFrameStart()) {
