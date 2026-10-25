@@ -158,6 +158,14 @@ private:
     u32 vp_frames = 0, scan_draws = 0, scan_hits = 0;
     std::array<u32, 3> scan_sources{}; ///< buffers scanned: ring, guest address, user data
     bool scene_open = false, tally_has_entries = false;
+    struct SceneDepth {
+        VideoCore::ImageId depth{};
+        u32 draws = 0;
+        std::array<float, 4> viewport{};
+        std::array<float, 2> depth_range{};
+    };
+    std::array<SceneDepth, 4> scene_depths{};
+    u32 scene_depth_count = 0;
     u32 miss_streak = 0, scenes_missed = 0, open_displays = 0;
     vk::UniqueDescriptorSetLayout vp_desc_layout;
     vk::UniquePipelineLayout vp_pipeline_layout;

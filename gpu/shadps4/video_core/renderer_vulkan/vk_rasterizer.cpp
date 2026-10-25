@@ -304,7 +304,7 @@ void Rasterizer::PrepareRenderState(const GraphicsPipeline* pipeline) {
                                 vp_ctl.yoffset_enable ? vp.yoffset : 0.0f},
                 {vp_ctl.zscale_enable ? vp.zscale : 1.0f,
                  vp_ctl.zoffset_enable ? vp.zoffset : 0.0f});
-            scan_camera = db_desc.first == camera_motion->Depth();
+            scan_camera = true; // the camera is recognised by content in any such draw
             scan_size = {depth_w, depth_h};
         }
     }

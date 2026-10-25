@@ -307,24 +307,51 @@ void CameraMotion::OnScenePrepass(VideoCore::ImageId depth, std::array<float, 4>
                                   std::array<float, 2> depth_range) {
     ++scan_draws;
     if (!scene_open) {
-        // The first pre-pass draw after the last composite: a new scene. (Display passes are not
+        // The first depth-only draw after the last composite: a new scene. (Display passes are not
         // frame boundaries here: the game repeats frames at 30 fps and may issue the next
         // pre-pass before the previous frame's display pass.)
         scene_open = true;
         open_displays = 0;
         vp_resolved = false;
         vp_tally.Clear();
-        depth_id = depth;
-        vp_viewport = viewport;
-        vp_depth = depth_range;
+        tally_has_entries = false;
+        scene_depth_count = 0;
+        depth_id = {};
+    }
+    // Other screen-sized depth-only draws exist (after the composite, a UI pass): the scene depth
+    // is the one the most draws of the scene use, the pre-pass has hundreds.
+    SceneDepth* entry = nullptr;
+    for (u32 i = 0; i < scene_depth_count; ++i) {
+        if (scene_depths[i].depth == depth) {
+            entry = &scene_depths[i];
+            break;
+        }
+    }
+    if (!entry && scene_depth_count < scene_depths.size()) {
+        entry = &scene_depths[scene_depth_count++];
+        *entry = {depth, 0, viewport, depth_range};
+    }
+    if (entry) {
+        ++entry->draws;
+    }
+    const SceneDepth* best = nullptr;
+    for (u32 i = 0; i < scene_depth_count; ++i) {
+        if (!best || scene_depths[i].draws > best->draws) {
+            best = &scene_depths[i];
+        }
+    }
+    if (best && best->depth != depth_id) {
+        depth_id = best->depth;
+        vp_viewport = best->viewport;
+        vp_depth = best->depth_range;
         // SPARTAN_VP_FLIP=x|y|xy mirrors an axis, for calibration against the picture.
         if (vp_flip & 1u) vp_viewport[0] = -vp_viewport[0];
         if (vp_flip & 2u) vp_viewport[1] = -vp_viewport[1];
         static std::array<float, 4> logged{};
-        if (viewport != logged) {
-            logged = viewport;
-            std::printf("Camera motion: viewport scale %g %g offset %g %g\n", viewport[0],
-                        viewport[1], viewport[2], viewport[3]);
+        if (best->viewport != logged) {
+            logged = best->viewport;
+            std::printf("Camera motion: viewport scale %g %g offset %g %g\n", best->viewport[0],
+                        best->viewport[1], best->viewport[2], best->viewport[3]);
         }
     }
 }
