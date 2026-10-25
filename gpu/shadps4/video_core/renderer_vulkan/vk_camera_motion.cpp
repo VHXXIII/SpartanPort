@@ -303,10 +303,20 @@ void CameraMotion::OnGBufferPass(VideoCore::ImageId depth) {
     depth_id = depth;
 }
 
-void CameraMotion::OnScenePrepass(VideoCore::ImageId depth, std::array<float, 4> viewport,
+bool CameraMotion::OnScenePrepass(VideoCore::ImageId depth, std::array<float, 4> viewport,
                                   std::array<float, 2> depth_range) {
+    if (!scene_open && main_depth && depth != main_depth) {
+        // A depth-only draw of another screen-sized depth after the composite (UI): not a scene.
+        // If it goes on for long (the game reallocated its depth), the scene depth is learnt again.
+        if (++foreign_draws >= 256) {
+            main_depth = {};
+            foreign_draws = 0;
+        }
+        return false;
+    }
     ++scan_draws;
     if (!scene_open) {
+        foreign_draws = 0;
         // The first depth-only draw after the last composite: a new scene. (Display passes are not
         // frame boundaries here: the game repeats frames at 30 fps and may issue the next
         // pre-pass before the previous frame's display pass.)
@@ -354,6 +364,7 @@ void CameraMotion::OnScenePrepass(VideoCore::ImageId depth, std::array<float, 4>
                         best->viewport[1], best->viewport[2], best->viewport[3]);
         }
     }
+    return true;
 }
 
 void CameraMotion::OnCameraCandidate(const float* data, u32 size_bytes, u32 width, u32 height,
@@ -443,6 +454,7 @@ bool CameraMotion::ResolveViewProjection() {
     if (!scene_open || !vp_tally.Best(best)) {
         if (scene_open) {
             ++miss_streak; // a scene without a camera (a menu, a movie, or an unknown layout)
+            main_depth = {};
             scene_open = false;
             vp_resolved = true;
         }
@@ -452,6 +464,7 @@ bool CameraMotion::ResolveViewProjection() {
     open_displays = 0;
     vp_resolved = true;
     scene_open = false;
+    main_depth = depth_id;
     tally_has_entries = false;
     vp_previous = vp_current;
     vp_previous_valid = vp_current_valid;

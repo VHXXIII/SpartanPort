@@ -98,8 +98,13 @@ public:
 
     /// The depth pre-pass (no colour target, a screen-sized depth): its depth is the scene depth.
     /// `viewport`: the game's x scale, y scale, x offset, y offset (screen = offset + scale * ndc).
-    void OnScenePrepass(VideoCore::ImageId depth, std::array<float, 4> viewport,
+    bool OnScenePrepass(VideoCore::ImageId depth, std::array<float, 4> viewport,
                         std::array<float, 2> depth_range);
+    /// Between the first pre-pass draw of a frame and its composite: the only time draws are
+    /// jittered (the HUD, drawn when the game repeats a frame, must not be).
+    [[nodiscard]] bool SceneOpen() const noexcept {
+        return scene_open;
+    }
 
     /// A vertex constant buffer of the pre-pass: counted when its first 16 floats are a
     /// view-projection for a screen of `width` x `height`.
@@ -166,6 +171,8 @@ private:
     };
     std::array<SceneDepth, 4> scene_depths{};
     u32 scene_depth_count = 0;
+    VideoCore::ImageId main_depth{}; ///< the scene depth of the last frame with a camera
+    u32 foreign_draws = 0;
     u32 miss_streak = 0, scenes_missed = 0, open_displays = 0;
     vk::UniqueDescriptorSetLayout vp_desc_layout;
     vk::UniquePipelineLayout vp_pipeline_layout;

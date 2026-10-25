@@ -433,7 +433,7 @@ bool TemporalUpscaler::JitterDepth(VideoCore::ImageId depth) const {
     }
     // Only while the last frame had a camera: a frame the upscaler skips must not be jittered
     // (the HUD and menus draw with depth buffers too).
-    if (!camera_motion.ViewProjectionCamera()) {
+    if (!camera_motion.ViewProjectionCamera() || !camera_motion.SceneOpen()) {
         return false;
     }
     if (depth == camera_motion.Depth()) {

@@ -297,14 +297,13 @@ void Rasterizer::PrepareRenderState(const GraphicsPipeline* pipeline) {
                 std::printf("Camera motion: depth range scale %g offset %g (scale enable %u)\n",
                             vp.zscale, vp.zoffset, u32(vp_ctl.zscale_enable));
             }
-            camera_motion->OnScenePrepass(
+            scan_camera = camera_motion->OnScenePrepass(
                 db_desc.first, {vp_ctl.xscale_enable ? vp.xscale : 1.0f,
                                 vp_ctl.yscale_enable ? vp.yscale : 1.0f,
                                 vp_ctl.xoffset_enable ? vp.xoffset : 0.0f,
                                 vp_ctl.yoffset_enable ? vp.yoffset : 0.0f},
                 {vp_ctl.zscale_enable ? vp.zscale : 1.0f,
                  vp_ctl.zoffset_enable ? vp.zoffset : 0.0f});
-            scan_camera = true; // the camera is recognised by content in any such draw
             scan_size = {depth_w, depth_h};
         }
     }
