@@ -1240,10 +1240,13 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
     }
     pipeline->BindResources(set_writes, push_data);
     // spartanport: jitter geometry drawn with the scene depth, not full-screen passes (a shifted
-    // full-screen quad leaves an edge column unwritten).
+    // full-screen quad leaves an edge column unwritten). God of War III's screen passes are a
+    // triangle (3 indices) or a strip quad (4); its sky and sun glow are quads of 6 indices that
+    // belong to the world and must move with the jitter like the rest of the scene.
     draw_jitter = {};
     if (upscaler->Enabled() && db_desc.first && upscaler->JitterDepth(db_desc.first) &&
-        (regs.num_indices > 6 || regs.num_instances.NumInstances() > 1)) {
+        (regs.num_indices > (camera_motion->ViewProjectionCamera() ? 4u : 6u) ||
+         regs.num_instances.NumInstances() > 1)) {
         draw_jitter = upscaler->Jitter();
     }
     UpdateDynamicState(pipeline, is_indexed);

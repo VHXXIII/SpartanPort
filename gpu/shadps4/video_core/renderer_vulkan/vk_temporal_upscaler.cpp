@@ -793,6 +793,24 @@ void TemporalUpscaler::RecordTaa(vk::CommandBuffer cmdbuf, vk::ImageView color,
     if (camera_motion.ViewProjectionCamera()) {
         params.pad |= 1u << 24; // depth rejection through the reprojection matrix
         params.pad |= 1u << 25; // 8-bit tonemapped colour: variance clipping, less history
+        // The look of the accumulation (SPARTAN_TAA_STATIC / _MOVING: share of the history on a
+        // still and a fast moving pixel; _GAMMA: width of the colour box the history is clipped
+        // to; _CONFIDENCE: how fast a heavily clipped history loses weight).
+        static const std::array<float, 4> look = [] {
+            const auto value = [](const char* name, float fallback, float lo, float hi) {
+                const char* text = std::getenv(name);
+                return text && *text ? std::clamp(float(std::atof(text)), lo, hi) : fallback;
+            };
+            std::array<float, 4> result{value("SPARTAN_TAA_STATIC", 0.92f, 0.0f, 0.99f),
+                                        value("SPARTAN_TAA_MOVING", 0.55f, 0.0f, 0.99f),
+                                        value("SPARTAN_TAA_GAMMA", 1.15f, 0.3f, 3.0f),
+                                        value("SPARTAN_TAA_CONFIDENCE", 6.0f, 0.0f, 50.0f)};
+            std::printf("TAA look: static %g moving %g gamma %g confidence %g\n", result[0],
+                        result[1], result[2], result[3]);
+            return result;
+        }();
+        params.depth[1] = {look[0], look[1], 1.0f, look[2]};
+        params.depth[0][3] = look[3];
     }
     // Optional techniques for A/B in one run (SPARTAN_TOGGLE_FILE bits 51-54): tonemapped blending,
     // YCoCg clipping, variance clipping, 3x3 reconstruction. Measured in game on 2026-10-02
