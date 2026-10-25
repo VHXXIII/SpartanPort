@@ -86,7 +86,10 @@ void main() {
     ivec2 p = ivec2(gl_GlobalInvocationID.xy);
     ivec2 size = imageSize(result_img);
     if (any(greaterThanEqual(p, size))) return;
-    const uint diag = pad & 0xffu, variant = pad >> 8;
+    const uint diag = pad & 0xffu, variant = (pad >> 8) & 0xffu;
+    // Pad bit 25: tonemapped 8-bit scene colour (God of War III): variance clipping in YCoCg and
+    // less history on moving pixels; the HDR game's A/B findings do not apply to it.
+    const bool ldr = (pad & (1u << 25)) != 0u;
     vec2 current_pos = vec2(p) + jitter;
     ivec2 color_source = clamp(ivec2(floor(current_pos + 0.5)), ivec2(0), size - 1);
     ivec2 source = color_source;
@@ -193,11 +196,11 @@ void main() {
                 diagnostic_sample = history_rgb / coverage;
                 float moving = clamp(length(motion) / 8.0, 0.0, 1.0);
                 vec3 clipped;
-                if ((variant & 2u) != 0u) {
+                if (ldr || (variant & 2u) != 0u) {
                     // Clip towards the box centre in tonemapped YCoCg (no hue shift), within
                     // mean +- gamma * sigma with variance clipping (Salvi).
                     vec3 box_lo = lo, box_hi = hi;
-                    if ((variant & 4u) != 0u) {
+                    if (ldr || (variant & 4u) != 0u) {
                         vec3 mean = moment1 / 9.0;
                         vec3 sigma = sqrt(max(moment2 / 9.0 - mean * mean, vec3(0.0)));
                         float gamma = mix(1.25, 0.9, moving);
@@ -211,7 +214,7 @@ void main() {
                 }
                 diagnostic_history = clipped;
                 // Reliable history suppresses subpixel shimmer even on distant geometry.
-                float weight = mix(0.98, 0.85, moving) * coverage;
+                float weight = (ldr ? mix(0.93, 0.7, moving) : mix(0.98, 0.85, moving)) * coverage;
                 history_weight = weight;
                 // Tonemapped blending: a few very bright HDR samples otherwise dominate.
                 result = (variant & 1u) != 0u

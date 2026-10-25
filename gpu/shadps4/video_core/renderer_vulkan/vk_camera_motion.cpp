@@ -323,6 +323,22 @@ void CameraMotion::OnScenePrepass(VideoCore::ImageId depth, std::array<float, 4>
 }
 
 void CameraMotion::OnCameraCandidate(const float* data, u32 size_bytes, u32 width, u32 height) {
+    if (size_bytes >= 16 * sizeof(float) && !CameraVp::LooksLikeViewProjection(data, float(width), float(height))) {
+        // A near miss (about the right aspect but not quite orthogonal): log a few, to learn what
+        // the camera looks like when it is not recognised.
+        static u32 near_misses = 0;
+        float v[4];
+        if (near_misses < 12 && CameraVp::Metrics(data, float(width) / float(height), v) &&
+            v[0] < 0.2f && v[1] < 0.2f && v[2] < 0.2f && v[3] < 0.2f &&
+            std::abs(data[0]) + std::abs(data[5]) > 0.1f) {
+            ++near_misses;
+            std::printf("Camera motion: near-miss buffer %u bytes, metrics %.4f %.4f %.4f %.4f, "
+                        "floats %g %g %g %g | %g %g %g %g | %g %g %g %g | %g %g %g %g\n",
+                        size_bytes, v[0], v[1], v[2], v[3], data[0], data[1], data[2], data[3],
+                        data[4], data[5], data[6], data[7], data[8], data[9], data[10], data[11],
+                        data[12], data[13], data[14], data[15]);
+        }
+    }
     if (size_bytes >= 16 * sizeof(float) &&
         CameraVp::LooksLikeViewProjection(data, float(width), float(height))) {
         vp_tally.Add(data);

@@ -93,7 +93,7 @@ public:
     /// This frame's sub-pixel jitter in pixels (screen x right, y down); zero when off and after
     /// the upscale (post and UI are not jittered).
     [[nodiscard]] std::array<float, 2> Jitter() const noexcept {
-        return done_this_frame ? std::array<float, 2>{} : jitter;
+        return done_this_frame || composite_passed ? std::array<float, 2>{} : jitter;
     }
 
     // Scaled presets.
@@ -209,6 +209,7 @@ private:
     u32 ldr_runs = 0;       // upscales of the 8-bit scene colour since then
     const char* skip_reason = "none"; // why the last queued upscale did not run
     bool composite_pending = false;
+    bool composite_passed = false; ///< the scene is finished this frame: nothing after it is jittered
     u64 composite_ps = 0x0c20ededc9e7c40c; // SPARTAN_UPSCALER_COMPOSITE_PS overrides it
     bool last_active = false, last_jitter = false;
 

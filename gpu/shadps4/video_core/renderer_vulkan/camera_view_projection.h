@@ -19,14 +19,15 @@ inline float Element(const Matrix& m, int row, int column) {
     return m[4 * column + row];
 }
 
-/// Whether the 16 floats are a perspective view-projection for a `width` x `height` screen.
-inline bool LooksLikeViewProjection(const float* m, float width, float height) {
+/// How much 16 floats look like a perspective view-projection for a screen of the given aspect:
+/// result = {|row0| / |row1| - 1 / aspect, cos(row0, row1), cos(row0, row3), cos(row1, row3)}
+/// (rows of the 3x3 part, all absolute). False when a value is not finite or a row is empty.
+inline bool Metrics(const float* m, float aspect, float* result) {
     for (int i = 0; i < 16; ++i) {
         if (!std::isfinite(m[i]) || std::abs(m[i]) > 1e7f) {
             return false;
         }
     }
-    const float aspect = width / height;
     float rows[4][3];
     float norms[4];
     for (int r = 0; r < 4; ++r) {
@@ -36,8 +37,7 @@ inline bool LooksLikeViewProjection(const float* m, float width, float height) {
         norms[r] = std::sqrt(rows[r][0] * rows[r][0] + rows[r][1] * rows[r][1] +
                              rows[r][2] * rows[r][2]);
     }
-    if (norms[0] < 1e-3f || norms[1] < 1e-3f || norms[3] < 1e-3f ||
-        std::abs(norms[0] / norms[1] - 1.0f / aspect) > 0.01f) {
+    if (norms[0] < 1e-3f || norms[1] < 1e-3f || norms[3] < 1e-3f) {
         return false;
     }
     const auto cosine = [&](int a, int b) {
@@ -45,7 +45,18 @@ inline bool LooksLikeViewProjection(const float* m, float width, float height) {
                           rows[a][2] * rows[b][2];
         return std::abs(dot) / (norms[a] * norms[b]);
     };
-    return cosine(0, 1) < 0.01f && cosine(0, 3) < 0.01f && cosine(1, 3) < 0.01f;
+    result[0] = std::abs(norms[0] / norms[1] - 1.0f / aspect);
+    result[1] = cosine(0, 1);
+    result[2] = cosine(0, 3);
+    result[3] = cosine(1, 3);
+    return true;
+}
+
+/// Whether the 16 floats are a perspective view-projection for a `width` x `height` screen.
+inline bool LooksLikeViewProjection(const float* m, float width, float height) {
+    float v[4];
+    return Metrics(m, width / height, v) && v[0] <= 0.02f && v[1] < 0.02f && v[2] < 0.02f &&
+           v[3] < 0.02f;
 }
 
 /// Inverse of a general 4x4 matrix (double precision); false when singular.

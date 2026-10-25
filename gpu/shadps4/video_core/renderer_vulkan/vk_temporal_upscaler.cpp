@@ -354,6 +354,7 @@ bool TemporalUpscaler::OnFrameStart() {
     }
     dispatched_last_frame = false;
     composite_pending = false;
+    composite_passed = false;
 
     // The display pass of an upscaled frame reads the upscaled UI image.
     display_redirect = ui_phase;
@@ -399,6 +400,7 @@ void TemporalUpscaler::OnPixelShader(u64 ps_hash, VideoCore::ImageId color) {
         return;
     }
     ++composite_seen;
+    composite_passed = true;
     if (done_this_frame || failed || Scaled() || !Active()) {
         skip_reason = done_this_frame ? "done" : failed ? "failed" : Scaled() ? "scaled" : "inactive";
         return;
@@ -426,6 +428,11 @@ bool TemporalUpscaler::JitterDepth(VideoCore::ImageId depth) const {
     if (!depth || !camera_motion.Depth()) {
         return false;
     }
+    // Only while the last frame had a camera: a frame the upscaler skips must not be jittered
+    // (the HUD and menus draw with depth buffers too).
+    if (!camera_motion.ViewProjectionCamera()) {
+        return false;
+    }
     if (depth == camera_motion.Depth()) {
         return true;
     }
@@ -433,7 +440,7 @@ bool TemporalUpscaler::JitterDepth(VideoCore::ImageId depth) const {
     // same pixels): jittered like the original so both agree.
     const auto& scene = texture_cache.GetImage(camera_motion.Depth());
     const auto& image = texture_cache.GetImage(depth);
-    return camera_motion.ViewProjectionCamera() && image.info.pixel_format == scene.info.pixel_format &&
+    return image.info.pixel_format == scene.info.pixel_format &&
            image.info.size.width == scene.info.size.width &&
            image.info.size.height == scene.info.size.height;
 }
@@ -782,6 +789,7 @@ void TemporalUpscaler::RecordTaa(vk::CommandBuffer cmdbuf, vk::ImageView color,
              camera_motion.TaaDepthParameters(), camera_motion.Reprojection()};
     if (camera_motion.ViewProjectionCamera()) {
         params.pad |= 1u << 24; // depth rejection through the reprojection matrix
+        params.pad |= 1u << 25; // 8-bit tonemapped colour: variance clipping, less history
     }
     // Optional techniques for A/B in one run (SPARTAN_TOGGLE_FILE bits 51-54): tonemapped blending,
     // YCoCg clipping, variance clipping, 3x3 reconstruction. Measured in game on 2026-10-02
