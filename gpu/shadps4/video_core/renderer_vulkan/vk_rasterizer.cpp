@@ -305,6 +305,7 @@ void Rasterizer::PrepareRenderState(const GraphicsPipeline* pipeline) {
                 {vp_ctl.zscale_enable ? vp.zscale : 1.0f,
                  vp_ctl.zoffset_enable ? vp.zoffset : 0.0f});
             scan_size = {depth_w, depth_h};
+            scene_depth_address = regs.depth_buffer.DepthAddress();
             if (camera_motion->TakeSceneStart() && upscaler->Enabled()) {
                 // One jitter per scene, for its draws, the motion shader and the TAA pass alike.
                 upscaler->OnSceneStart();
@@ -1746,6 +1747,18 @@ bool Rasterizer::BindResources(const Pipeline* pipeline) {
         if (sampler_lod_bias != reported) {
             reported = sampler_lod_bias;
             std::printf("Upscaler: scene texture LOD bias %.2f\n", sampler_lod_bias);
+        }
+    }
+
+    // spartanport: God of War III materials (the pass drawing with the scene depth, no depth write):
+    // a negative mip bias for the accumulating TAA/FSR, as temporal upscalers recommend.
+    if (!pipeline->IsCompute() && sampler_lod_bias == 0.0f && upscaler->Active() &&
+        camera_motion->ViewProjectionCamera() && camera_motion->SceneOpen() &&
+        scene_depth_address != 0) {
+        const auto& r = Regs();
+        if (r.depth_buffer.DepthAddress() == scene_depth_address &&
+            !r.depth_control.depth_write_enable && r.num_indices > 4 && r.color_buffers[0]) {
+            sampler_lod_bias = -float(SpartanSettings::Get().taa_lod.load()) / 100.0f;
         }
     }
 

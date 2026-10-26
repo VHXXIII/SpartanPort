@@ -467,8 +467,12 @@ void ImageTab() {
             SliderRow("Moving objects", s.taa_objects, 0, 100, "%d%%",
                       "How much history a moving character or object loses. Higher: less ghosting there, "
                       "rougher edges. Default 90%.");
+            SliderRow("Texture detail", s.taa_lod, 0, 150, "%d%%",
+                      "Sharper textures (a negative mip bias, in percent of one level): the accumulation "
+                      "turns the extra detail into a clean picture. Higher: more detail, more shimmer. "
+                      "Default 50%.");
             SliderRow("TAA sharpening", s.taa_sharpen, 0, 200, "%d%%",
-                      "Sharpening after the accumulation. Default 60%.");
+                      "Sharpening after the accumulation. Default 80%.");
             ImGui::EndTable();
         }
     }

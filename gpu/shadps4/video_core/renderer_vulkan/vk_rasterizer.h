@@ -509,6 +509,7 @@ private:
     u32 pending_checks = 0;
     u64 proxy_samples = 0; ///< texture bindings that read a scene proxy (statistics)
     float sampler_lod_bias = 0.0f; ///< spartanport: extra bias of this draw's samplers
+    u64 scene_depth_address = 0;   ///< spartanport: guest address of the scene's depth (God of War III)
     bool scene_debug_frame = false; ///< SPARTAN_SCENE_DEBUG: this frame's passes are printed
     bool PendingWriteOverlaps(VAddr address, u64 size);
     /// Stage B: the ring bindings of the stages of the packet being recorded.
