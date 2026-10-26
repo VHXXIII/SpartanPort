@@ -248,6 +248,21 @@ void main() {
                 // LDR: history that had to be clipped far (a moving object without a motion vector, a
                 // lighting change) is less trusted, which removes the smear behind characters.
                 float confidence = ldr ? 1.0 - clamp(clip_error * proj.w, 0.0, 0.75) : 1.0;
+                if (ldr && (variant & 128u) == 0u) {
+                    // Objects without motion vectors (characters, foliage): a slow mover stays inside
+                    // the neighbourhood box and passes the depth test, so its history smears. The
+                    // 3x3 patch of the history differs from the current one far more than jitter
+                    // noise makes it differ on a static picture (sim: 0.09 against 0.01 luma);
+                    // such pixels trust the history less. Variant bit 128 turns this off.
+                    float diff = 0.0;
+                    for (int y = -1; y <= 1; ++y)
+                        for (int x = -1; x <= 1; ++x) {
+                            vec3 c = tonemap(texelFetch(color_tex, clamp(color_source + ivec2(x, y), ivec2(0), size - 1), 0).rgb);
+                            vec3 h = tonemap(texelFetch(history_tex, clamp(base + ivec2(x, y) + ivec2(round(fraction)), ivec2(0), size - 1), 0).rgb);
+                            diff += abs(luma(c) - luma(h));
+                        }
+                    confidence *= 1.0 - 0.9 * smoothstep(0.04, 0.10, diff / 9.0);
+                }
                 float weight = (ldr ? mix(prev_proj.x, prev_proj.y, moving) : mix(0.98, 0.85, moving)) *
                                coverage * confidence;
                 history_weight = weight;
