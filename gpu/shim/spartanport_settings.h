@@ -86,6 +86,12 @@ struct Values {
     std::atomic<bool> fsr1{false};
     std::atomic<bool> rcas{true};
     std::atomic<int> rcas_strength{75};
+    /// God of War III TAA look (percent; the in-game menu, Image tab). Live.
+    /// taa_static / taa_moving: share of the history on a still / fast moving pixel;
+    /// taa_tolerance: width of the colour range the history is clipped to; taa_objects: how much
+    /// history a changed patch (a moving object without motion vectors) loses; taa_sharpen: sharpening
+    /// after the accumulation.
+    std::atomic<int> taa_static{92}, taa_moving{55}, taa_tolerance{115}, taa_objects{90}, taa_sharpen{60};
     /// The game's own motion blur (spartanport_motion_blur.h); off skips its draws. Live.
     std::atomic<bool> motion_blur{true};
     /// The game's depth of field (spartanport_depth_of_field.h); off keeps the whole picture sharp. Live.

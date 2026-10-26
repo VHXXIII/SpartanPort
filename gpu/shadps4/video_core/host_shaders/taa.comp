@@ -13,7 +13,7 @@ layout(binding = 6, rgba16f) uniform writeonly image2D diagnostic_img;
 layout(push_constant) uniform Params {
     vec2 jitter;
     uint reset_history;
-    uint pad; // bits 0-7: diagnostic output (SPARTAN_TAA_DIAGNOSTICS); 8-12: A/B switches; 24: view-projection depth
+    uint pad; // bits 0-7: diagnostic output; 8-15: A/B switches; 16-23: history loss of changed patches (percent); 24: view-projection depth; 25: 8-bit scene
     vec4 proj;
     vec4 prev_proj;
     vec4 previous_z; // view-projection mode: the game's viewport (x scale, y scale, x offset, y offset)
@@ -261,7 +261,7 @@ void main() {
                             vec3 h = tonemap(texelFetch(history_tex, clamp(base + ivec2(x, y) + ivec2(round(fraction)), ivec2(0), size - 1), 0).rgb);
                             diff += abs(luma(c) - luma(h));
                         }
-                    confidence *= 1.0 - 0.9 * smoothstep(0.04, 0.10, diff / 9.0);
+                    confidence *= 1.0 - float((pad >> 16) & 0xffu) * 0.01 * smoothstep(0.04, 0.10, diff / 9.0);
                 }
                 float weight = (ldr ? mix(prev_proj.x, prev_proj.y, moving) : mix(0.98, 0.85, moving)) *
                                coverage * confidence;

@@ -117,6 +117,16 @@ void Set(Values& v, const std::string& key, const std::string& value) {
         v.depth_of_field = i != 0;
     } else if (key == "rcas_strength") {
         v.rcas_strength = SpartanGraphics::ParseRcasStrength(value.empty() ? -1 : i);
+    } else if (key == "taa_static") {
+        v.taa_static = std::clamp(i, 0, 99);
+    } else if (key == "taa_moving") {
+        v.taa_moving = std::clamp(i, 0, 99);
+    } else if (key == "taa_tolerance") {
+        v.taa_tolerance = std::clamp(i, 30, 300);
+    } else if (key == "taa_objects") {
+        v.taa_objects = std::clamp(i, 0, 100);
+    } else if (key == "taa_sharpen") {
+        v.taa_sharpen = std::clamp(i, 0, 200);
     } else if (key == "frames_queued") {
         v.frames_queued = SpartanGraphics::ParseFramesQueued(value.empty() ? -1 : i);
     } else if (key == "render_resolution") {
@@ -388,6 +398,9 @@ void Save() {
                  v.anisotropy.load(), v.vibration.load(), v.mouse_prompt_distance.load(), int(v.mouse_lock.load()),
                  v.mouse_aim_style.load(), v.mouse_aim_sensitivity.load());
     std::fprintf(file, "motion_blur=%d\ndepth_of_field=%d\n", int(v.motion_blur.load()), int(v.depth_of_field.load()));
+    std::fprintf(file, "taa_static=%d\ntaa_moving=%d\ntaa_tolerance=%d\ntaa_objects=%d\ntaa_sharpen=%d\n",
+                 v.taa_static.load(), v.taa_moving.load(), v.taa_tolerance.load(), v.taa_objects.load(),
+                 v.taa_sharpen.load());
     std::fprintf(file, "anti_aliasing=%s\n",
                  SpartanGraphics::AntiAliasingKeys[std::clamp(v.anti_aliasing.load(), 0, int(SpartanGraphics::AaSmaa))].data());
     std::fprintf(file, "master_volume=%d\naudio_channels=%s\n", v.master_volume.load(),

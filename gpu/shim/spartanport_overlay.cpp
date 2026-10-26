@@ -455,6 +455,23 @@ void ImageTab() {
     if (s.anti_aliasing != G::AaOff && !s.aa_applied) {
         DisabledText("Anti-aliasing is not active: this graphics card could not set it up.");
     }
+    if (s.upscaler == SpartanSettings::UpscalerTaa) {
+        Separator("TAA look (God of War III)");
+        if (BeginRows("##taa_look")) {
+            SliderRow("History on still picture", s.taa_static, 0, 99, "%d%%",
+                      "Higher: smoother edges on a still picture, a little more trail. Default 92%.");
+            SliderRow("History on moving picture", s.taa_moving, 0, 99, "%d%%",
+                      "Higher: smoother while the camera moves, more blur and trail. Default 55%.");
+            SliderRow("Colour tolerance", s.taa_tolerance, 30, 300, "%d%%",
+                      "Lower: less trail and ghosting, more flicker. Default 115%.");
+            SliderRow("Moving objects", s.taa_objects, 0, 100, "%d%%",
+                      "How much history a moving character or object loses. Higher: less ghosting there, "
+                      "rougher edges. Default 90%.");
+            SliderRow("TAA sharpening", s.taa_sharpen, 0, 200, "%d%%",
+                      "Sharpening after the accumulation. Default 60%.");
+            ImGui::EndTable();
+        }
+    }
     Separator("Sharpening");
     if (BeginRows("##scaling")) {
         ImGui::BeginDisabled(rcas_blocked);

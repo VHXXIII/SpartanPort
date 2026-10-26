@@ -828,22 +828,23 @@ void TemporalUpscaler::RecordTaa(vk::CommandBuffer cmdbuf, vk::ImageView color,
     if (camera_motion.ViewProjectionCamera()) {
         params.pad |= 1u << 24; // depth rejection through the reprojection matrix
         params.pad |= 1u << 25; // 8-bit tonemapped colour: variance clipping, less history
-        // The look of the accumulation (SPARTAN_TAA_STATIC / _MOVING: share of the history on a
-        // still and a fast moving pixel; _GAMMA: width of the colour box the history is clipped
-        // to; _CONFIDENCE: how fast a heavily clipped history loses weight).
-        static const std::array<float, 4> look = [] {
-            const auto value = [](const char* name, float fallback, float lo, float hi) {
-                const char* text = std::getenv(name);
-                return text && *text ? std::clamp(float(std::atof(text)), lo, hi) : fallback;
-            };
-            std::array<float, 4> result{value("SPARTAN_TAA_STATIC", 0.92f, 0.0f, 0.99f),
-                                        value("SPARTAN_TAA_MOVING", 0.55f, 0.0f, 0.99f),
-                                        value("SPARTAN_TAA_GAMMA", 1.15f, 0.3f, 3.0f),
-                                        value("SPARTAN_TAA_CONFIDENCE", 6.0f, 0.0f, 50.0f)};
-            std::printf("TAA look: static %g moving %g gamma %g confidence %g\n", result[0],
-                        result[1], result[2], result[3]);
-            return result;
-        }();
+        // The look of the accumulation, live from the in-game menu (Image tab): share of the history
+        // on a still and a fast moving pixel, width of the colour box the history is clipped to, and
+        // how much history a changed 3x3 patch (a moving object without motion vectors) loses.
+        const auto& taa = SpartanSettings::Get();
+        const std::array<float, 4> look{std::clamp(taa.taa_static.load() / 100.0f, 0.0f, 0.99f),
+                                        std::clamp(taa.taa_moving.load() / 100.0f, 0.0f, 0.99f),
+                                        std::clamp(taa.taa_tolerance.load() / 100.0f, 0.3f, 3.0f), 6.0f};
+        const u32 objects = u32(std::clamp(taa.taa_objects.load(), 0, 100));
+        params.pad |= objects << 16;
+        static std::array<float, 5> logged{-1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
+        const std::array<float, 5> now{look[0], look[1], look[2], float(objects),
+                                       float(taa.taa_sharpen.load())};
+        if (now != logged) {
+            logged = now;
+            std::printf("TAA look: static %g moving %g tolerance %g objects %g sharpen %g\n", now[0],
+                        now[1], now[2], now[3], now[4]);
+        }
         params.depth[1] = {look[0], look[1], 1.0f, look[2]};
         params.depth[0][3] = look[3];
     }
@@ -870,7 +871,8 @@ void TemporalUpscaler::RecordTaa(vk::CommandBuffer cmdbuf, vk::ImageView color,
     const auto& settings = SpartanSettings::Get();
     float strength = std::clamp(settings.sharpness.load(), 0.0f, 2.0f);
     if (camera_motion.ViewProjectionCamera() && settings.sharpen) {
-        strength = std::max(strength, 0.6f); // the 8-bit scene is softened by the history resampling
+        // the 8-bit scene is softened by the history resampling: its own, menu-set strength
+        strength = std::clamp(settings.taa_sharpen.load() / 100.0f, 0.0f, 2.0f);
     }
     if (settings.sharpen && strength > 0.0f && !(params.pad & 0xffu)) {
         const vk::MemoryBarrier2 resolved{
