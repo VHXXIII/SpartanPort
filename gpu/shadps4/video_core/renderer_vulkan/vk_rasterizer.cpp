@@ -1752,7 +1752,7 @@ bool Rasterizer::BindResources(const Pipeline* pipeline) {
 
     // spartanport: God of War III materials (the pass drawing with the scene depth, no depth write):
     // a negative mip bias for the accumulating TAA/FSR, as temporal upscalers recommend.
-    if (!pipeline->IsCompute() && sampler_lod_bias == 0.0f && upscaler->Active() &&
+    if (!pipeline->IsCompute() && sampler_lod_bias == 0.0f && upscaler->Enabled() &&
         camera_motion->ViewProjectionCamera() && camera_motion->SceneOpen() &&
         scene_depth_address != 0) {
         const auto& r = Regs();
