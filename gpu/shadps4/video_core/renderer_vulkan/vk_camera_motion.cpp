@@ -32,13 +32,20 @@ struct PushConstants {
     u32 mode;
 };
 
+// Mirrors the std430 push constant block of camera_motion_vp.comp: the vec4 viewport sits at offset
+// 96, so two floats of padding follow depth_range (without them the shader read the viewport from
+// the wrong place and every camera motion vector was off).
 struct VpPushConstants {
-    CameraVp::Matrix reproject;
-    std::array<float, 2> size;
-    std::array<float, 2> jitter;
-    std::array<float, 2> depth_range;
-    std::array<float, 4> viewport;
+    CameraVp::Matrix reproject;       // 0
+    std::array<float, 2> size;        // 64
+    std::array<float, 2> jitter;      // 72
+    std::array<float, 2> depth_range; // 80
+    std::array<float, 2> pad{};       // 88
+    std::array<float, 4> viewport;    // 96
+    u32 mode;                         // 112: 1 = object motion vectors are valid
+    std::array<u32, 3> pad_end{};     // 116
 };
+static_assert(sizeof(VpPushConstants) == 128);
 
 /// a * b for 3x4 affine matrices (rows [R | t]).
 std::array<float, 12> Multiply(const std::array<float, 12>& a, const std::array<float, 12>& b) {
