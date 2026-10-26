@@ -305,6 +305,11 @@ void Rasterizer::PrepareRenderState(const GraphicsPipeline* pipeline) {
                 {vp_ctl.zscale_enable ? vp.zscale : 1.0f,
                  vp_ctl.zoffset_enable ? vp.zoffset : 0.0f});
             scan_size = {depth_w, depth_h};
+            if (camera_motion->TakeSceneStart() && upscaler->Enabled()) {
+                // One jitter per scene, for its draws, the motion shader and the TAA pass alike.
+                upscaler->OnSceneStart();
+                camera_motion->SetJitter(upscaler->Jitter());
+            }
         }
     }
     if (upscaler->Enabled() && cb_descs[0].first) {

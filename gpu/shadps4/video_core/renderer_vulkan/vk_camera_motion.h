@@ -100,6 +100,10 @@ public:
     /// `viewport`: the game's x scale, y scale, x offset, y offset (screen = offset + scale * ndc).
     bool OnScenePrepass(VideoCore::ImageId depth, std::array<float, 4> viewport,
                         std::array<float, 2> depth_range);
+    /// True once after a new scene's first depth pre-pass draw.
+    [[nodiscard]] bool TakeSceneStart() noexcept {
+        return std::exchange(scene_started, false);
+    }
     /// Between the first pre-pass draw of a frame and its composite: the only time draws are
     /// jittered (the HUD, drawn when the game repeats a frame, must not be).
     [[nodiscard]] bool SceneOpen() const noexcept {
@@ -162,7 +166,7 @@ private:
     std::array<float, 2> vp_depth{1.0f, 0.0f}; ///< depth scale, offset
     u32 vp_frames = 0, scan_draws = 0, scan_hits = 0;
     std::array<u32, 3> scan_sources{}; ///< buffers scanned: ring, guest address, user data
-    bool scene_open = false, tally_has_entries = false;
+    bool scene_open = false, tally_has_entries = false, scene_started = false;
     struct SceneDepth {
         VideoCore::ImageId depth{};
         u32 draws = 0;

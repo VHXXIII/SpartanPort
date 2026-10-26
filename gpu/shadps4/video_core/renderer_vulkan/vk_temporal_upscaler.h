@@ -78,6 +78,9 @@ public:
 
     /// Start of a frame in the command stream (display pass).
     bool OnFrameStart();
+    /// The first depth pre-pass draw of a scene (view-projection camera): this scene's jitter and
+    /// per-frame state, instead of the display pass's.
+    void OnSceneStart();
     bool RasterScaling() const;
     /// spartanport: LOD bias for scene materials, log2(render / output) while a reduced scene is
     /// upscaled (0 at native size, for TAA and without an upscaler).

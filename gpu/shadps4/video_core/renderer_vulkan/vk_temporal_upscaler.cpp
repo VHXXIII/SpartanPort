@@ -332,7 +332,11 @@ bool TemporalUpscaler::OnFrameStart() {
     }
     SpartanSettings::Get().active_render_width = Scaled() ? render_width : scene_targets.Size().width;
     SpartanSettings::Get().active_render_height = Scaled() ? render_height : scene_targets.Size().height;
-    if (changed || !dispatched_last_frame) reset = true;
+    // God of War III (view-projection camera): the frame is the scene, from its first depth
+    // pre-pass draw to its composite (OnSceneStart); the display passes do not delimit it (the
+    // game repeats frames and may start the next scene before the display pass of the last).
+    const bool scene_frames = camera_motion.ViewProjectionCamera();
+    if (changed || (!dispatched_last_frame && !scene_frames)) reset = true;
     if (changed) jitter_index = 0;
     applied_preset = preset;
     applied_output = output;
@@ -357,14 +361,19 @@ bool TemporalUpscaler::OnFrameStart() {
         composite_seen = 0;
         ldr_runs = 0;
     }
-    dispatched_last_frame = false;
-    composite_pending = false;
-    composite_passed = false;
+    if (!scene_frames) {
+        dispatched_last_frame = false;
+        composite_pending = false;
+        composite_passed = false;
+    }
 
     // The display pass of an upscaled frame reads the upscaled UI image.
     display_redirect = ui_phase;
     ui_phase = false;
     ui_read_barrier = false;
+    if (scene_frames) {
+        return changed; // the scene owns the rest of the frame state and the jitter
+    }
     done_this_frame = false;
     ldr_target = {};
     scene_color = {};
@@ -383,6 +392,29 @@ bool TemporalUpscaler::OnFrameStart() {
     jitter_index = jitter_index % phases + 1;
     jitter = {Halton(jitter_index, 2) - 0.5f, Halton(jitter_index, 3) - 0.5f};
     return changed;
+}
+
+void TemporalUpscaler::OnSceneStart() {
+    if (!camera_motion.ViewProjectionCamera()) {
+        return; // OnFrameStart delimits the frame
+    }
+    if (!dispatched_last_frame) {
+        reset = true; // the last scene was not upscaled: no usable history
+    }
+    dispatched_last_frame = false;
+    composite_pending = false;
+    composite_passed = false;
+    done_this_frame = false;
+    ldr_target = {};
+    scene_color = {};
+    if (!jitter_enabled) {
+        jitter = {};
+        return;
+    }
+    const u32 phases = Scaled() ? Motion::JitterPhases(render_width, target_width)
+        : Motion::JitterPhases(scene_targets.Size().width, 1920);
+    jitter_index = jitter_index % phases + 1;
+    jitter = {Halton(jitter_index, 2) - 0.5f, Halton(jitter_index, 3) - 0.5f};
 }
 
 void TemporalUpscaler::OnDispatch(u64 cs_hash) {

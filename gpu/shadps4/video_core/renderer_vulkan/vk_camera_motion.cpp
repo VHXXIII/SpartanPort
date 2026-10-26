@@ -321,6 +321,7 @@ bool CameraMotion::OnScenePrepass(VideoCore::ImageId depth, std::array<float, 4>
         // frame boundaries here: the game repeats frames at 30 fps and may issue the next
         // pre-pass before the previous frame's display pass.)
         scene_open = true;
+        scene_started = true;
         open_displays = 0;
         vp_resolved = false;
         vp_tally.Clear();
