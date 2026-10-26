@@ -1756,9 +1756,26 @@ bool Rasterizer::BindResources(const Pipeline* pipeline) {
         camera_motion->ViewProjectionCamera() && camera_motion->SceneOpen() &&
         scene_depth_address != 0) {
         const auto& r = Regs();
-        if (r.depth_buffer.DepthAddress() == scene_depth_address &&
-            !r.depth_control.depth_write_enable && r.num_indices > 4 && r.color_buffers[0]) {
-            sampler_lod_bias = -float(SpartanSettings::Get().taa_lod.load()) / 100.0f;
+        static u32 same_depth = 0, writes = 0, small = 0, no_color = 0, applied = 0, calls = 0;
+        if (r.depth_buffer.DepthAddress() == scene_depth_address) {
+            ++same_depth;
+            if (r.depth_control.depth_write_enable) {
+                ++writes;
+            } else if (r.num_indices <= 4) {
+                ++small;
+            } else if (!r.color_buffers[0]) {
+                ++no_color;
+            } else {
+                ++applied;
+                sampler_lod_bias = -float(SpartanSettings::Get().taa_lod.load()) / 100.0f;
+            }
+        }
+        if (++calls % 20000 == 0) {
+            std::printf("TAA texture bias %.2f: %u of %u scene-depth draws (skipped: %u write, %u small, "
+                        "%u no colour; %u other draws)\n",
+                        -float(SpartanSettings::Get().taa_lod.load()) / 100.0f, applied, same_depth, writes,
+                        small, no_color, calls - same_depth);
+            same_depth = writes = small = no_color = applied = calls = 0;
         }
     }
 

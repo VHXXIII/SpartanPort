@@ -472,7 +472,7 @@ void ImageTab() {
                       "turns the extra detail into a clean picture. Higher: more detail, more shimmer. "
                       "Default 50%.");
             SliderRow("TAA sharpening", s.taa_sharpen, 0, 200, "%d%%",
-                      "Sharpening after the accumulation. Default 80%.");
+                      "Sharpening after the accumulation. Default 140%.");
             ImGui::EndTable();
         }
     }
