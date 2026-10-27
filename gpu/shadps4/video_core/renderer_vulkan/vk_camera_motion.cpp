@@ -491,16 +491,18 @@ void CameraMotion::OnDisplayPass(VideoCore::ImageId frame) {
         Overlay(frame);
     }
     // A scene (pre-pass) that no composite closed for a few frames is dropped.
-    if (scene_open && ++open_displays >= 3) {
+    // The game repeats display passes at 60 Hz while a heavy scene (an arena) takes several of them
+    // from its pre-pass to its composite: dropping it after 3 lost the camera for the whole level.
+    if (scene_open && ++open_displays >= 24) {
         scene_open = false;
         tally_has_entries = false;
         vp_tally.Clear();
     }
     // A display pass without a scene is a repeated frame (30 fps): not a break of the history.
-    // Only several in a row (a menu, a loading screen) drop it.
+    // Only many in a row (a menu, a loading screen, a slow scene) drop it.
     if (frame_has_camera) {
         scenes_missed = 0;
-    } else if (++scenes_missed >= 4) {
+    } else if (++scenes_missed >= 16) {
         InvalidateHistory();
     }
     frame_has_camera = false;
