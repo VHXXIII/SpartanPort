@@ -347,22 +347,9 @@ bool TemporalUpscaler::OnFrameStart() {
     // upscaled within the last display passes.
     if (frames_since_run < 1000) ++frames_since_run;
     SpartanSettings::Get().temporal_applied = frames_since_run <= 30;
-    if (SpartanSettings::Get().upscaler != SpartanSettings::UpscalerOff && ++status_frames >= 300) {
-        // One line every few seconds: why a selected TAA or FSR does (not) run (last_run.log).
-        const auto scan = camera_motion.TakeScanCounts();
-        const auto sources = camera_motion.TakeScanSources();
-        std::printf("Temporal AA status: mode=%s ran_last_frame=%d active=%d failed=%d camera_ready=%d "
-                    "camera_frames=%u prepass_draws=%u camera_buffers=%u trigger_seen=%u composite_seen=%u ldr_runs=%u skip=%s scaled_session=%d scanned_ring=%u scanned_guest=%u scanned_flat=%u jitter_on=%d jitter=%.3f,%.3f jit_shifted=%u jit_small=%u jit_clipoff=%u jit_zero=%u\n",
-                    SpartanSettings::UpscalerName(SpartanSettings::Get().upscaler), int(frames_since_run <= 30),
-                    int(Active()), int(failed), int(camera_motion.CameraHistory()),
-                    camera_motion.TakeCameraFrames(), scan[0], scan[1], trigger_seen, composite_seen, ldr_runs,
-                    skip_reason, int(Scaled()), sources[0], sources[1], sources[2], int(jitter_enabled), jitter[0], jitter[1],
-                    jitter_draws[0], jitter_draws[1], jitter_draws[2], jitter_draws[3]);
-        jitter_draws = {};
-        status_frames = 0;
-        trigger_seen = 0;
-        composite_seen = 0;
-        ldr_runs = 0;
+    if (!scene_frames && SpartanSettings::Get().upscaler != SpartanSettings::UpscalerOff &&
+        ++status_frames >= 300) {
+        PrintStatus();
     }
     if (!scene_frames) {
         dispatched_last_frame = false;
@@ -397,7 +384,43 @@ bool TemporalUpscaler::OnFrameStart() {
     return changed;
 }
 
+void TemporalUpscaler::PrintStatus() {
+    // One line every few seconds: why a selected TAA or FSR does (not) run (last_run.log).
+    const auto scan = camera_motion.TakeScanCounts();
+    const auto sources = camera_motion.TakeScanSources();
+    std::printf("Temporal AA status: mode=%s ran_last_frame=%d active=%d failed=%d camera_ready=%d "
+                "camera_frames=%u prepass_draws=%u camera_buffers=%u trigger_seen=%u composite_seen=%u ldr_runs=%u skip=%s scaled_session=%d scanned_ring=%u scanned_guest=%u scanned_flat=%u jitter_on=%d jitter=%.3f,%.3f jit_shifted=%u jit_small=%u jit_clipoff=%u jit_zero=%u scenes=%u done_skips=%u\n",
+                SpartanSettings::UpscalerName(SpartanSettings::Get().upscaler), int(frames_since_run <= 30),
+                int(Active()), int(failed), int(camera_motion.CameraHistory()),
+                camera_motion.TakeCameraFrames(), scan[0], scan[1], trigger_seen, composite_seen, ldr_runs,
+                skip_reason, int(Scaled()), sources[0], sources[1], sources[2], int(jitter_enabled), jitter[0], jitter[1],
+                jitter_draws[0], jitter_draws[1], jitter_draws[2], jitter_draws[3], scene_counter, done_skips);
+    jitter_draws = {};
+    done_skips = 0;
+    scene_counter = 0;
+    trigger_seen = 0;
+    composite_seen = 0;
+    ldr_runs = 0;
+    status_frames = 0;
+    composite_status = 0;
+}
+
+void TemporalUpscaler::NoteSkip() {
+    if (std::strcmp(skip_reason, "done") == 0) {
+        ++done_skips;
+        return; // a second composite of a scene that already ran
+    }
+    // One line per change of the reason a scene was not upscaled (and when it runs again).
+    if (std::strcmp(skip_reason, logged_skip) != 0) {
+        logged_skip = skip_reason;
+        std::printf("TAA scene: skipped (%s), camera_ready=%d scene=%u\n", skip_reason,
+                    int(camera_motion.CameraHistory()), scene_counter);
+    }
+    SpartanSettings::Get().temporal_applied = false;
+}
+
 void TemporalUpscaler::OnSceneStart() {
+    ++scene_counter;
     if (!camera_motion.ViewProjectionCamera()) {
         return; // OnFrameStart delimits the frame
     }
@@ -441,9 +464,14 @@ void TemporalUpscaler::OnPixelShader(u64 ps_hash, VideoCore::ImageId color) {
     }
     ++composite_seen;
     composite_passed = true;
+    // God of War III: the scenes, not the display passes, are the frames; the status line comes from here.
+    if (SpartanSettings::Get().upscaler != SpartanSettings::UpscalerOff && ++composite_status >= 300) {
+        PrintStatus();
+    }
     camera_motion.ResolveViewProjection(); // closes the scene: its pre-pass is complete
     if (done_this_frame || failed || Scaled() || !Active()) {
         skip_reason = done_this_frame ? "done" : failed ? "failed" : Scaled() ? "scaled" : "inactive";
+        NoteSkip();
         return;
     }
     scene_color = color;
@@ -459,6 +487,7 @@ void TemporalUpscaler::RunPending() {
     if (!camera_motion.ResolveViewProjection() || !camera_motion.Ready()) {
         // No pre-pass camera this frame (a menu, a cut scene), or the first frame: no history.
         skip_reason = camera_motion.Depth() ? "no_previous_camera" : "no_depth";
+        NoteSkip();
         reset = true;
         return;
     }
@@ -844,13 +873,13 @@ void TemporalUpscaler::RecordTaa(vk::CommandBuffer cmdbuf, vk::ImageView color,
         const u32 objects = u32(std::clamp(taa.taa_objects.load(), 0, 100));
         params.pad |= objects << 16;
         params.pad |= u32(std::clamp(taa.taa_spatial.load(), 0, 100) * 63 / 100) << 26;
-        static std::array<float, 5> logged{-1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
-        const std::array<float, 5> now{look[0], look[1], look[2], float(objects),
-                                       float(taa.taa_sharpen.load())};
+        static std::array<float, 6> logged{-1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
+        const std::array<float, 6> now{look[0], look[1], look[2], float(objects),
+                                       float(taa.taa_sharpen.load()), float(taa.taa_spatial.load())};
         if (now != logged) {
             logged = now;
-            std::printf("TAA look: static %g moving %g tolerance %g objects %g sharpen %g\n", now[0],
-                        now[1], now[2], now[3], now[4]);
+            std::printf("TAA look: static %g moving %g tolerance %g objects %g sharpen %g edges %g\n", now[0],
+                        now[1], now[2], now[3], now[4], now[5]);
         }
         params.depth[1] = {look[0], look[1], 1.0f, look[2]};
         params.depth[0][3] = look[3];
@@ -1613,6 +1642,11 @@ void TemporalUpscaler::RunLdr() {
     dispatched_last_frame = true; frames_since_run = 0;
     ++ldr_runs;
     skip_reason = "none";
+    if (std::strcmp(logged_skip, "none") != 0) {
+        logged_skip = "none";
+        std::printf("TAA scene: running again (scene %u)\n", scene_counter);
+    }
+    SpartanSettings::Get().temporal_applied = true;
 
     // Keep the game's alpha, then write the result back (the blit encodes sRGB).
     own_barrier(vk::Image(output_image), vk::ImageLayout::eGeneral, all, rw,

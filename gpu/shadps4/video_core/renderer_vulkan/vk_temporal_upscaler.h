@@ -81,6 +81,8 @@ public:
     /// The first depth pre-pass draw of a scene (view-projection camera): this scene's jitter and
     /// per-frame state, instead of the display pass's.
     void OnSceneStart();
+    void PrintStatus();
+    void NoteSkip();
     bool RasterScaling() const;
     /// spartanport: LOD bias for scene materials, log2(render / output) while a reduced scene is
     /// upscaled (0 at native size, for TAA and without an upscaler).
@@ -217,6 +219,8 @@ private:
     int applied_upscaler = -1;
     bool dispatched_last_frame = false;
     u32 frames_since_run = 1000; ///< display passes since a scene was last upscaled
+    u32 composite_status = 0, scene_counter = 0, done_skips = 0;
+    const char* logged_skip = "none";
     u32 status_frames = 0;  // frames since the last status line in the log
     u32 trigger_seen = 0;   // times the frame's trigger dispatch was seen since then
     u32 composite_seen = 0; // composite draws seen since then (God of War III)
