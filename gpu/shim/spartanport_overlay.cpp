@@ -471,6 +471,9 @@ void ImageTab() {
                       "Sharper textures (a negative mip bias, in percent of one level): the accumulation "
                       "turns the extra detail into a clean picture. Higher: more detail, more shimmer. "
                       "Default 50%.");
+            CheckRow("Debug view (history)", s.taa_debug,
+                     "Shows where the history is used: red = rejected by depth, green = lost to colour "
+                     "change, blue = history weight used. For bug reports; not saved.");
             SliderRow("TAA sharpening", s.taa_sharpen, 0, 200, "%d%%",
                       "Sharpening after the accumulation. Default 140%.");
             ImGui::EndTable();

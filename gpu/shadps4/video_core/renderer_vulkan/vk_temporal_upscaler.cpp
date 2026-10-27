@@ -343,14 +343,17 @@ bool TemporalUpscaler::OnFrameStart() {
     applied_upscaler = upscaler;
     last_active = active;
     last_jitter = jitter_on;
-    SpartanSettings::Get().temporal_applied = dispatched_last_frame;
+    // Scenes, not display passes, delimit frames in God of War III: "running" means a scene was
+    // upscaled within the last display passes.
+    if (frames_since_run < 1000) ++frames_since_run;
+    SpartanSettings::Get().temporal_applied = frames_since_run <= 30;
     if (SpartanSettings::Get().upscaler != SpartanSettings::UpscalerOff && ++status_frames >= 300) {
         // One line every few seconds: why a selected TAA or FSR does (not) run (last_run.log).
         const auto scan = camera_motion.TakeScanCounts();
         const auto sources = camera_motion.TakeScanSources();
         std::printf("Temporal AA status: mode=%s ran_last_frame=%d active=%d failed=%d camera_ready=%d "
                     "camera_frames=%u prepass_draws=%u camera_buffers=%u trigger_seen=%u composite_seen=%u ldr_runs=%u skip=%s scaled_session=%d scanned_ring=%u scanned_guest=%u scanned_flat=%u jitter_on=%d jitter=%.3f,%.3f jit_shifted=%u jit_small=%u jit_clipoff=%u jit_zero=%u\n",
-                    SpartanSettings::UpscalerName(SpartanSettings::Get().upscaler), int(dispatched_last_frame),
+                    SpartanSettings::UpscalerName(SpartanSettings::Get().upscaler), int(frames_since_run <= 30),
                     int(Active()), int(failed), int(camera_motion.CameraHistory()),
                     camera_motion.TakeCameraFrames(), scan[0], scan[1], trigger_seen, composite_seen, ldr_runs,
                     skip_reason, int(Scaled()), sources[0], sources[1], sources[2], int(jitter_enabled), jitter[0], jitter[1],
@@ -825,6 +828,9 @@ void TemporalUpscaler::RecordTaa(vk::CommandBuffer cmdbuf, vk::ImageView color,
     } params{jitter, reset ? 1u : 0u, std::getenv("SPARTAN_TAA_DIAGNOSTICS") ?
                  u32(std::clamp(std::atoi(std::getenv("SPARTAN_TAA_DIAGNOSTICS")),1,3)) : 0u,
              camera_motion.TaaDepthParameters(), camera_motion.Reprojection()};
+    if (SpartanSettings::Get().taa_debug.load() && params.pad == 0) {
+        params.pad = 4; // menu: TAA debug view (taa.comp diag 4)
+    }
     if (camera_motion.ViewProjectionCamera()) {
         params.pad |= 1u << 24; // depth rejection through the reprojection matrix
         params.pad |= 1u << 25; // 8-bit tonemapped colour: variance clipping, less history
@@ -1337,7 +1343,7 @@ void TemporalUpscaler::Run() {
     }
     if (dispatched) {
         reset = false;
-        dispatched_last_frame = true;
+        dispatched_last_frame = true; frames_since_run = 0;
         if (SpartanSettings::Get().upscaler != SpartanSettings::UpscalerTaa) {
             ExtraSharpen(cmdbuf, vk::Image(output_image), false, ow, oh);
         }
@@ -1603,7 +1609,7 @@ void TemporalUpscaler::RunLdr() {
         return; // the scene colour stays as the game made it
     }
     reset = false;
-    dispatched_last_frame = true;
+    dispatched_last_frame = true; frames_since_run = 0;
     ++ldr_runs;
     skip_reason = "none";
 
@@ -2075,7 +2081,7 @@ void TemporalUpscaler::RunScaled() {
                     vk::AccessFlagBits2::eTransferWrite, vk::ImageLayout::eGeneral,
                     vk::PipelineStageFlagBits2::eColorAttachmentOutput, color_access);
             reset = false;
-            dispatched_last_frame = true;
+            dispatched_last_frame = true; frames_since_run = 0;
             if (const int dump = DumpFrame(); dump >= 0) {
                 DumpImages(instance, scheduler, cmdbuf, dump,
                            {{color_image, source_width, source_height, 4, "input", "rgba"},
@@ -2166,7 +2172,7 @@ void TemporalUpscaler::RunScaled() {
     } else {
         ok = true;
         reset = false;
-        dispatched_last_frame = true;
+        dispatched_last_frame = true; frames_since_run = 0;
         ExtraSharpen(cmdbuf, vk::Image(ui_image), true, ow, oh);
     }
     barrier(vk::Image(ui_image), vk::ImageAspectFlagBits::eColor, vk::ImageLayout::eGeneral, all,

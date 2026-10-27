@@ -95,6 +95,9 @@ struct Values {
     /// Texture detail of the scene's materials: a negative mip bias of taa_lod / 100 levels, which the
     /// accumulation (jitter) turns into detail instead of shimmer (the usual TAA texture bias).
     std::atomic<int> taa_lod{50};
+    /// TAA debug view (not saved): red = history rejected by depth, green = lost to colour change /
+    /// moving-object detection, blue = history weight used.
+    std::atomic<bool> taa_debug{false};
     /// The game's own motion blur (spartanport_motion_blur.h); off skips its draws. Live.
     std::atomic<bool> motion_blur{true};
     /// The game's depth of field (spartanport_depth_of_field.h); off keeps the whole picture sharp. Live.

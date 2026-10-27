@@ -216,6 +216,7 @@ private:
     int applied_preset = -1;
     int applied_upscaler = -1;
     bool dispatched_last_frame = false;
+    u32 frames_since_run = 1000; ///< display passes since a scene was last upscaled
     u32 status_frames = 0;  // frames since the last status line in the log
     u32 trigger_seen = 0;   // times the frame's trigger dispatch was seen since then
     u32 composite_seen = 0; // composite draws seen since then (God of War III)
