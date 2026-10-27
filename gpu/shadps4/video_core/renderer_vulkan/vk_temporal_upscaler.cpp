@@ -843,6 +843,7 @@ void TemporalUpscaler::RecordTaa(vk::CommandBuffer cmdbuf, vk::ImageView color,
                                         std::clamp(taa.taa_tolerance.load() / 100.0f, 0.3f, 3.0f), 6.0f};
         const u32 objects = u32(std::clamp(taa.taa_objects.load(), 0, 100));
         params.pad |= objects << 16;
+        params.pad |= u32(std::clamp(taa.taa_spatial.load(), 0, 100) * 63 / 100) << 26;
         static std::array<float, 5> logged{-1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
         const std::array<float, 5> now{look[0], look[1], look[2], float(objects),
                                        float(taa.taa_sharpen.load())};

@@ -13,7 +13,7 @@ layout(binding = 6, rgba16f) uniform writeonly image2D diagnostic_img;
 layout(push_constant) uniform Params {
     vec2 jitter;
     uint reset_history;
-    uint pad; // bits 0-7: diagnostic output; 8-15: A/B switches; 16-23: history loss of changed patches (percent); 24: view-projection depth; 25: 8-bit scene
+    uint pad; // bits 0-7: diagnostic output; 8-15: A/B switches; 16-23: history loss of changed patches (percent); 24: view-projection depth; 25: 8-bit scene; 26-31: spatial edge smoothing of low-history pixels (0..63)
     vec4 proj;
     vec4 prev_proj;
     vec4 previous_z; // view-projection mode: the game's viewport (x scale, y scale, x offset, y offset)
@@ -277,8 +277,32 @@ void main() {
             }
         }
     }
+    vec3 shown = result;
+    const float spatial = float(pad >> 26) * (1.0 / 63.0);
+    if (ldr && spatial > 0.0) {
+        // Spatial fallback where the history was (partly) refused: a moving object has no AA from
+        // time, so smooth its stair-stepped edges from the current picture alone.
+        float need = clamp((0.75 - history_weight) / 0.5, 0.0, 1.0);
+        if (need > 0.0) {
+            float l[9];
+            for (int y = -1; y <= 1; ++y)
+                for (int x = -1; x <= 1; ++x)
+                    l[(y + 1) * 3 + x + 1] = luma(tonemap(texelFetch(color_tex, clamp(color_source + ivec2(x, y), ivec2(0), size - 1), 0).rgb));
+            float gx = (l[2] + 2.0 * l[5] + l[8]) - (l[0] + 2.0 * l[3] + l[6]);
+            float gy = (l[6] + 2.0 * l[7] + l[8]) - (l[0] + 2.0 * l[1] + l[2]);
+            float mag = length(vec2(gx, gy));
+            float edge = smoothstep(0.1, 0.1 * 3.0, mag);
+            if (edge > 0.0) {
+                vec2 n = vec2(gx, gy) / mag;
+                vec3 a = fetchLinear(color_tex, current_pos + n * 0.5).rgb;
+                vec3 b = fetchLinear(color_tex, current_pos - n * 0.5).rgb;
+                vec3 sp = clamp((current * 1.0 + a + b) / (1.0 + 2.0), rgb_lo, rgb_hi);
+                shown = mix(result, sp, need * edge * spatial);
+            }
+        }
+    }
     // Optional diagnostic alpha; normal output remains opaque.
-    vec3 output_color = diag == 2 ? current : diag == 3 ? diagnostic_history : diag == 4 ? debug_view : result;
+    vec3 output_color = diag == 2 ? current : diag == 3 ? diagnostic_history : diag == 4 ? debug_view : shown;
     imageStore(result_img, p, vec4(output_color, diag != 0 ? history_weight : 1.0));
     imageStore(next_history, p, vec4(result, depth));
     if (diag != 0) imageStore(diagnostic_img,p,

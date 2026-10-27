@@ -471,6 +471,9 @@ void ImageTab() {
                       "Sharper textures (a negative mip bias, in percent of one level): the accumulation "
                       "turns the extra detail into a clean picture. Higher: more detail, more shimmer. "
                       "Default 50%.");
+            SliderRow("Moving object edges", s.taa_spatial, 0, 100, "%d%%",
+                      "Smooths the stair-stepped edges of moving characters, where the history is refused: "
+                      "a spatial filter on those pixels only. Higher: smoother, slightly softer. Default 60%.");
             CheckRow("Debug view (history)", s.taa_debug,
                      "Shows where the history is used: red = rejected by depth, green = lost to colour "
                      "change, blue = history weight used. For bug reports; not saved.");
