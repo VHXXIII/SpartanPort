@@ -308,19 +308,69 @@ shadPS4 занимали по ядру. На свободной системе: 
 ## God of War III Remastered layout (TAA and FSR 3.1 Native AA)
 
 The frame differs from the 5-target G-buffer layout above (found with `tools/spartanport_frame_map.py`
-on F11 captures):
+on F11 captures).
 
-- Depth: the depth pre-pass (no colour target, screen-sized depth, more than 6 indices per draw).
-  Square shadow-map passes are skipped by aspect.
+### Frame structure
+
+- Scene: depth pre-pass (no colour target, screen-sized depth, more than 6 indices per draw; square
+  shadow-map passes are skipped by aspect), then the material pass (colour target, the same depth,
+  no depth write), bloom / depth of field, and the composite. The display passes repeat at 60 Hz while
+  scenes come at 30 fps and are pipelined, so **a scene, not a display pass, is the frame**:
+  it opens at its first pre-pass draw (`CameraMotion::OnScenePrepass`) and closes at the composite
+  (`ResolveViewProjection`). A scene no composite closed within 24 display passes is dropped.
 - Camera: one vertex constant buffer of the pre-pass holds a column-major view-projection in its
   first 16 floats. Which shader and slot differs, so it is recognised by content
-  (`camera_view_projection.h`, unit test `tests/test_camera_vp.cpp`). Depth is `z / w` with
-  `z = w - near`: 0 at the near plane, 1 at infinity.
-- Motion vectors: `camera_motion_vp.comp`, from `previousVP * inverse(currentVP)`.
-  `SPARTAN_VP_FLIP=x|y|xy` mirrors the screen axes for calibration if the image ghosts when moving.
-- Jitter: viewport offset of draws with the scene depth or its same-size copy (transparents).
+  (`camera_view_projection.h`, unit test `tests/test_camera_vp.cpp`). Depth is `0.5 + 0.5 z / w`
+  (the game's depth range scale/offset 0.5/0.5); the viewport is 960 x -540 around 960, 540.
+- Motion vectors: `camera_motion_vp.comp`, from `previousVP * inverse(currentVP)` through the game's
+  viewport; the push constants are 128 bytes (std430 `vec4` alignment, a static_assert guards it).
+  Characters have no motion vectors of their own (see the moving-object handling below).
+  `SPARTAN_VP_FLIP=x|y|xy` mirrors the screen axes for calibration.
 - Trigger: the draw whose pixel shader is the post-process composite (`0c20ededc9e7c40c`, override
   `SPARTAN_UPSCALER_COMPOSITE_PS`). The upscale runs before the next draw or dispatch, on the 8-bit
   sRGB scene colour (sampled through an sRGB view), before the HUD. The result is written back with
   a blit; the game's alpha is kept (`ldr_alpha.comp`).
-- `last_run.log` prints `Temporal AA status: ...` every ~5 s (`composite_seen`, `ldr_runs`, `skip`).
+- MSAA is not used by the game; the half-resolution layer (instanced vegetation-like pass, own
+  depth) is not jittered.
+
+### Jitter
+
+One Halton(2,3) sample per scene (`TemporalUpscaler::OnSceneStart`, `Motion::JitterPhases`), applied
+as a viewport offset to the draws that use the scene depth or its same-size copy (transparents),
+skipping screen-space passes (3 or 4 indices) so a shifted full-screen quad leaves no edge column.
+
+### TAA (`taa.comp`, settings "TAA look (God of War III)" in the Image tab)
+
+- Current colour: Catmull-Rom unjitter, history: Catmull-Rom resample at the reprojected position,
+  depth rejection per bilinear tap, variance clipping in tonemapped YCoCg.
+- Moving objects (no vectors): a 3x3 patch whose luma differs from the history loses history
+  (`taa_objects`). The jitter makes textured pixels look changed in ~3% of a still picture, so a
+  pixel needs a changed neighbour in the **previous** frame to lose the full amount (otherwise 30%).
+  The flag lives in the sign of the history alpha (depth); every read of that alpha uses `abs()`.
+- Pixels whose history was refused get an edge-directed 3-tap spatial smoothing on the current picture
+  (`taa_spatial`; the history keeps the unfiltered result). Its strength is in `pad` bits 26..31.
+- Texture detail: a negative LOD bias (`taa_lod / 100`) on the scene's material draws
+  (`Rasterizer::BindResources`: scene depth address, no depth write, more than 4 indices, a colour
+  target); the accumulation turns it into detail.
+- Sharpening: RCAS-style pass `taa_sharpen.comp` after the accumulation (`taa_sharpen`, up to 200%).
+- `pad` bits: 0-7 diagnostic view (4 = history debug view: red depth-rejected, green history lost,
+  blue weight used), 8-15 A/B switches, 16-23 moving-object history loss in percent, 24 view-projection
+  depth, 25 8-bit scene, 26-31 spatial smoothing.
+- Defaults (tuned in game on a GTX 1070 Ti): history 99% still / 55% moving, tolerance 115%,
+  moving objects 90%, edges 70%, texture detail 75%, sharpening 165%. They live in
+  `shim/spartanport_settings.h` and in the menu hints.
+
+### Simulator
+
+The tuning used a software renderer of a procedural scene (static, slow and fast camera, moving box)
+run through `taa.comp` on lavapipe with PSNR against a 9-sample ground truth, a Laplacian sharpness
+ratio and the frame-to-frame flicker. It is not part of the repository; the numbers that mattered:
+the change flag persistence halved the flicker of a still picture (0.0021 -> 0.0010) for 1.5 dB less
+in the moving region.
+
+### Log
+
+`last_run.log` prints `Temporal AA status: ...` every 300 composites (`composite_seen`, `ldr_runs`,
+`skip`, `scenes`, `done_skips`), `TAA scene: skipped (reason)` / `running again` when a scene is not
+upscaled, and `TAA look: ...` once the sliders settle. `ran_last_frame` and the menu's "running"
+indicator follow the dispatches, not the display passes.

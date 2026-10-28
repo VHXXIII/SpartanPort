@@ -91,12 +91,12 @@ struct Values {
     /// taa_tolerance: width of the colour range the history is clipped to; taa_objects: how much
     /// history a changed patch (a moving object without motion vectors) loses; taa_sharpen: sharpening
     /// after the accumulation.
-    std::atomic<int> taa_static{92}, taa_moving{55}, taa_tolerance{115}, taa_objects{90}, taa_sharpen{140};
+    std::atomic<int> taa_static{99}, taa_moving{55}, taa_tolerance{115}, taa_objects{90}, taa_sharpen{165};
     /// Texture detail of the scene's materials: a negative mip bias of taa_lod / 100 levels, which the
     /// accumulation (jitter) turns into detail instead of shimmer (the usual TAA texture bias).
-    std::atomic<int> taa_lod{50};
+    std::atomic<int> taa_lod{75};
     /// Edge smoothing of the pixels whose history was refused (moving characters): percent.
-    std::atomic<int> taa_spatial{60};
+    std::atomic<int> taa_spatial{70};
     /// TAA debug view (not saved): red = history rejected by depth, green = lost to colour change /
     /// moving-object detection, blue = history weight used.
     std::atomic<bool> taa_debug{false};

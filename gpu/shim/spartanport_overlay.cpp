@@ -459,7 +459,7 @@ void ImageTab() {
         Separator("TAA look (God of War III)");
         if (BeginRows("##taa_look")) {
             SliderRow("History on still picture", s.taa_static, 0, 99, "%d%%",
-                      "Higher: smoother edges on a still picture, a little more trail. Default 92%.");
+                      "Higher: smoother edges on a still picture, a little more trail. Default 99%.");
             SliderRow("History on moving picture", s.taa_moving, 0, 99, "%d%%",
                       "Higher: smoother while the camera moves, more blur and trail. Default 55%.");
             SliderRow("Colour tolerance", s.taa_tolerance, 30, 300, "%d%%",
@@ -470,15 +470,15 @@ void ImageTab() {
             SliderRow("Texture detail", s.taa_lod, 0, 150, "%d%%",
                       "Sharper textures (a negative mip bias, in percent of one level): the accumulation "
                       "turns the extra detail into a clean picture. Higher: more detail, more shimmer. "
-                      "Default 50%.");
+                      "Default 75%.");
             SliderRow("Moving object edges", s.taa_spatial, 0, 100, "%d%%",
                       "Smooths the stair-stepped edges of moving characters, where the history is refused: "
-                      "a spatial filter on those pixels only. Higher: smoother, slightly softer. Default 60%.");
+                      "a spatial filter on those pixels only. Higher: smoother, slightly softer. Default 70%.");
             CheckRow("Debug view (history)", s.taa_debug,
                      "Shows where the history is used: red = rejected by depth, green = lost to colour "
                      "change, blue = history weight used. For bug reports; not saved.");
             SliderRow("TAA sharpening", s.taa_sharpen, 0, 200, "%d%%",
-                      "Sharpening after the accumulation. Default 140%.");
+                      "Sharpening after the accumulation. Default 165%.");
             ImGui::EndTable();
         }
     }

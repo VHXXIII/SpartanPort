@@ -873,13 +873,20 @@ void TemporalUpscaler::RecordTaa(vk::CommandBuffer cmdbuf, vk::ImageView color,
         const u32 objects = u32(std::clamp(taa.taa_objects.load(), 0, 100));
         params.pad |= objects << 16;
         params.pad |= u32(std::clamp(taa.taa_spatial.load(), 0, 100) * 63 / 100) << 26;
-        static std::array<float, 6> logged{-1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
-        const std::array<float, 6> now{look[0], look[1], look[2], float(objects),
-                                       float(taa.taa_sharpen.load()), float(taa.taa_spatial.load())};
-        if (now != logged) {
-            logged = now;
-            std::printf("TAA look: static %g moving %g tolerance %g objects %g sharpen %g edges %g\n", now[0],
-                        now[1], now[2], now[3], now[4], now[5]);
+        // One line when the look settles (the menu sliders change it every frame while dragged).
+        static std::array<float, 7> logged{-1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
+        static std::array<float, 7> pending = logged;
+        static u32 stable_frames = 0;
+        const std::array<float, 7> now{look[0], look[1], look[2], float(objects),
+                                       float(taa.taa_sharpen.load()), float(taa.taa_spatial.load()),
+                                       float(taa.taa_lod.load())};
+        if (now != pending) {
+            pending = now;
+            stable_frames = 0;
+        } else if (stable_frames < 90 && ++stable_frames == 90 && pending != logged) {
+            logged = pending;
+            std::printf("TAA look: static %g moving %g tolerance %g objects %g sharpen %g edges %g "
+                        "texture detail %g\n", now[0], now[1], now[2], now[3], now[4], now[5], now[6]);
         }
         params.depth[1] = {look[0], look[1], 1.0f, look[2]};
         params.depth[0][3] = look[3];
