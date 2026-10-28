@@ -1224,7 +1224,7 @@ def game_environment(s):
     # Temporal upscaling is parked (build_graphics): a switch saved on by 2.1.8 has no control left to
     # turn it off, so it is ignored until the upscaler section comes back.
     env['SPARTAN_EXPERIMENTAL_UPSCALER'] = '0'
-    # The one exception: a temporal anti-aliasing the player chose (Graphics > Experimental), always at
+    # The one exception: a temporal anti-aliasing the player chose (Graphics > Anti-aliasing), always at
     # native resolution (preset 0, Native AA: no downscaling). Only that mode is selected, by the
     # environment, so spartanport.ini's upscaler key is never needed and FSR 4 / DLSS stay parked.
     if s.get('temporal_aa') in ('taa', 'fsr3'):
@@ -1963,14 +1963,6 @@ class Launcher:
         """Window and overlay controls; temporal upscaling stays commented out."""
         f = self.scrolled_page('graphics', _('Graphics', 'Графика'), _('How the game appears on your screen.'))
         self.build_display(f)
-        # Temporal upscaling is parked until its image quality is validated; only the native-resolution
-        # TAA can be tried, behind this switch.
-        self.section(f, _('Experimental'))
-        self.row(f, _('Temporal anti-aliasing'), self.choice(f, 'temporal_aa', 'app', TEMPORAL_AA),
-                 _('Off (default). Smooths edges and shimmering using previous frames, at native resolution '
-                   '(no downscaling). TAA is the game port\'s own; FSR 3.1 uses AMD\'s algorithm in its Native AA mode, '
-                   'on any graphics card. Neither is validated for this game yet: expect possible ghosting or '
-                   'flicker, and some extra GPU cost. Takes effect after restarting the game.'), restart=True)
         # self.section(f, _('Experimental'))
         # self.check(f, 'experimental_upscaler', 'app', _('Enable the upscaler (experimental)'),
         #            _('Off (default): the game runs without temporal upscaling; FSR 3.1 and TAA need this switch on. '
@@ -2027,6 +2019,15 @@ class Launcher:
                    _("The game's own blur of distant objects, strongest in cutscenes. Off keeps the whole picture sharp."))
         self.row(f, _('Anti-aliasing'), self.choice(f, 'anti_aliasing', 'ini', ANTI_ALIASING),
                  _('Smooths jagged edges. FXAA is cheap and a little soft; SMAA keeps the picture sharper and costs a bit more. Both also touch the HUD slightly.'))
+        # Temporal modes run at native resolution (game_environment): the game's own TAA, tuned for it,
+        # and AMD's FSR 3.1 in Native AA mode.
+        self.row(f, _('Temporal anti-aliasing'), self.choice(f, 'temporal_aa', 'app', TEMPORAL_AA),
+                 _('Off (default). Smooths edges and shimmering using previous frames, at native resolution '
+                   '(no downscaling). TAA is the port\'s own and is tuned for this game: its default values are the '
+                   'optimized ones, and every setting can be adjusted to your taste in the in-game menu '
+                   '(Insert / R3+L2) > Image. FSR 3.1 uses AMD\'s algorithm in its Native AA mode, on any graphics '
+                   'card; it is still being tuned for this game (possible ghosting or flicker). Use either with '
+                   'Anti-aliasing set to Off. Takes effect after restarting the game.'), restart=True)
         self.section(f, _('Textures'))
         self.row(f, _('Anisotropic filtering'), self.choice(f, 'anisotropy', 'ini', ANISOTROPY),
                  _('Sharper floors and walls seen at an angle, at little cost on most graphics cards.'),
