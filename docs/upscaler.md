@@ -380,12 +380,15 @@ with the picture at 10%: moving PSNR back to the unmasked 18.8 dB), which left a
 dark Kratos. A *relative* difference (tried in test27) fixed the dark simulator, but in the game it fired
 on the quantisation and dither noise of dark textures (sRGB codes 5 -> 10 are a 2x change in linear
 light) over the whole static picture: "very aggressive flicker" at every setting above 0. The absolute
-tonemapped detector is back. The menu slider "Moving objects" (`fsr_mask`, default 50%) is the
-sensitivity: the mask starts at a luma difference of 0.03 / s (0.06 at 50%) and is full at twice that;
+tonemapped detector is back. The menu slider "Moving objects" (`fsr_mask`, default 60%) is the
+sensitivity: the mask starts at a luma difference of 0.03 / s (0.05 at 60%) and is full at twice that;
 0 turns the mask off (toggle `1 << 27` too). The debug checkbox of the FSR panel highlights the mask (it
 shows blue in the game: the scene colour's channel order). The mask is off for the first frame after a
-reset or a skipped scene. The negative texture LOD bias (`taa_lod`) also applies to FSR (slider
-"Texture detail"). FSR's `DEPTH_INFINITE` and auto-exposure flags and the context's own sharpening were
+reset or a skipped scene. In-game tuning (test28, GTX 1070 Ti): 50-70% is the best compromise, below 50% Kratos ghosts, so the
+default is 60%. The FSR panel has its own "Texture detail" (`fsr_lod`, default 0%, TAA keeps `taa_lod`
+75%): the negative mip bias did nothing visible on the environment (with anisotropic filtering the
+surfaces are already sampled at their finest detail) and only added shimmer on Kratos, who is skinned
+and has no motion vectors. FSR's `DEPTH_INFINITE` and auto-exposure flags and the context's own sharpening were
 measured and left as they are.
 
 ### Simulator
