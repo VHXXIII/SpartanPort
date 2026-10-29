@@ -367,24 +367,26 @@ game draws characters and foliage without motion vectors, so FSR alone smears th
 the moving-region PSNR is 18.8 dB (TAA ~27 dB) while static scenes are better than TAA (37.0 dB,
 frame flicker 0.0010 against TAA's 0.002).
 
-A reactive mask closes the gap. `fsr_reactive.comp` compares the 3x3 luma patch of this frame with
-FSR's own result of the last frame (the accumulated picture, copied before sharpening into
-`fsr_previous_image`). The difference is *relative* to the patch's brightness (plus a small floor):
-the first version used the absolute luma difference (0.05..0.10) and never fired on a dark picture
-(Kratos, rock, lava): in the simulator with the picture scaled to 10% the moving-region PSNR fell back
-to the unmasked 18.8 dB. Like the TAA detector, a pixel needs a flagged neighbour in the last frame
-(two `R8` flag images ping-pong), otherwise only 20% of the mask is kept. Comparing with the previous
-*input* instead (jitter makes aliased textures differ) cost flicker 0.0051; with the previous FSR result
-0.0012 (absolute detector, bright picture: static 36.8 dB, moving 29.0 dB).
+A reactive mask closes the gap. `fsr_reactive.comp` compares the 3x3 luma patch of this frame (tonemapped
+linear luma, as in the TAA detector) with FSR's own result of the last frame (the accumulated picture,
+copied before sharpening into `fsr_previous_image`): a static pixel differs by ~0.01 even on a jittered
+aliased texture, a mover by ~0.09. Like the TAA detector, a pixel needs a flagged neighbour in the last
+frame (two `R8` flag images ping-pong), otherwise only 20% of the mask is kept. Comparing with the
+previous *input* instead (jitter makes aliased textures differ) cost flicker 0.0051; with the previous FSR
+result 0.0012 (bright simulator picture: static 36.8 dB, moving 29.0 dB).
 
-The menu slider "Moving objects" (`fsr_mask`, default 75%) is the sensitivity: the mask starts at a
-relative change of 0.55 - 0.4 * s (25% at the default) and is full at twice that. Sweep (aliased
-textures, bright / dark picture): start 20%: static 34.3 dB flicker 0.006 / 36.4 dB 0.0017, moving
-29.8 / 29.0 dB; start 30%: static 36.4 dB 0.0016 / 37.0 dB 0.0011, moving 23.9 / 20.7 dB. The default sits
-between. 0 turns the mask off (toggle `1 << 27` too). The debug checkbox of the FSR panel shows the mask
-in red. The mask is off for the first frame after a reset or a skipped scene. The negative texture LOD
-bias (`taa_lod`) also applies to FSR (slider "Texture detail"). FSR's `DEPTH_INFINITE` and auto-exposure
-flags and the context's own sharpening were measured and left as they are.
+In-game findings (test26-27, GTX 1070 Ti): the absolute detector never fires on a dark picture (simulator
+with the picture at 10%: moving PSNR back to the unmasked 18.8 dB), which left a slight trail behind a
+dark Kratos. A *relative* difference (tried in test27) fixed the dark simulator, but in the game it fired
+on the quantisation and dither noise of dark textures (sRGB codes 5 -> 10 are a 2x change in linear
+light) over the whole static picture: "very aggressive flicker" at every setting above 0. The absolute
+tonemapped detector is back. The menu slider "Moving objects" (`fsr_mask`, default 50%) is the
+sensitivity: the mask starts at a luma difference of 0.03 / s (0.06 at 50%) and is full at twice that;
+0 turns the mask off (toggle `1 << 27` too). The debug checkbox of the FSR panel highlights the mask (it
+shows blue in the game: the scene colour's channel order). The mask is off for the first frame after a
+reset or a skipped scene. The negative texture LOD bias (`taa_lod`) also applies to FSR (slider
+"Texture detail"). FSR's `DEPTH_INFINITE` and auto-exposure flags and the context's own sharpening were
+measured and left as they are.
 
 ### Simulator
 

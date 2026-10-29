@@ -829,7 +829,7 @@ void TemporalUpscaler::CreatePipelines() {
         fsr_reactive_desc_layout = Check(device.createDescriptorSetLayoutUnique({
             .flags = vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR,
             .bindingCount = u32(bindings.size()), .pBindings = bindings.data()}));
-        const vk::PushConstantRange push{vk::ShaderStageFlagBits::eCompute, 0, 10 * sizeof(float)};
+        const vk::PushConstantRange push{vk::ShaderStageFlagBits::eCompute, 0, 8 * sizeof(float)};
         fsr_reactive_pipeline_layout = Check(device.createPipelineLayoutUnique({
             .setLayoutCount = 1, .pSetLayouts = &*fsr_reactive_desc_layout,
             .pushConstantRangeCount = 1, .pPushConstantRanges = &push}));
@@ -1695,14 +1695,15 @@ void TemporalUpscaler::RunLdr() {
                 writes[i] = {.dstBinding = i, .descriptorCount = 1, .descriptorType = types[i],
                              .pImageInfo = &infos[i]};
             }
-            // The menu's "Moving objects" is the sensitivity: 75% starts the mask at a 25% luma change
-            // (simulator, bright and dark pictures), 100% at 15%; full at twice that. 0.2 of the mask
-            // is kept without a flagged neighbour in the last frame. The reference is FSR's result:
+            // The menu's "Moving objects" is the sensitivity: the mask starts at a tonemapped luma
+            // difference of 0.03 / s (0.06 at the default 50%) and is full at twice that. The simulator
+            // gave 0.05..0.10 as the best balance; real dark textures are noisier. 0.2 of the mask is
+            // kept without a flagged neighbour in the last frame. The reference is FSR's result:
             // no jitter shift.
-            const float sensitivity = float(mask_percent) / 100.0f;
-            const float low = 0.55f - 0.4f * sensitivity;
-            const float params[10] = {0.0f, 0.0f, low, 2.0f * low, 1.0f, 1.0f,
-                                      0.2f, have_previous ? 1.0f : 0.0f, 0.01f, 0.0f};
+            const float sensitivity = std::max(float(mask_percent), 1.0f) / 100.0f;
+            const float low = 0.03f / sensitivity;
+            const float params[8] = {0.0f, 0.0f, low, 2.0f * low, 1.0f, 1.0f,
+                                     0.2f, have_previous ? 1.0f : 0.0f};
             cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, *fsr_reactive_pipeline);
             cmdbuf.pushDescriptorSetKHR(vk::PipelineBindPoint::eCompute,
                                         *fsr_reactive_pipeline_layout, 0, writes);
