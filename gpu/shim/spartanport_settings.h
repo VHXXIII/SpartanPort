@@ -101,6 +101,7 @@ struct Values {
     std::atomic<int> fsr_lod{0};
     /// Edge smoothing of the pixels whose history was refused (moving characters): percent.
     std::atomic<int> taa_spatial{70};
+    std::atomic<int> fsr_edges{70}; ///< FSR 3.1: smoothing of the edges of moving objects, percent
     std::atomic<int> fsr_mask{60}; ///< FSR 3.1: strength of the moving-object mask, percent (0 = off)
     /// TAA debug view (not saved): red = history rejected by depth, green = lost to colour change /
     /// moving-object detection, blue = history weight used.

@@ -325,6 +325,9 @@ private:
     vk::UniqueDescriptorSetLayout fsr_reactive_desc_layout;
     vk::UniquePipelineLayout fsr_reactive_pipeline_layout;
     vk::UniquePipeline fsr_reactive_pipeline;
+    vk::UniqueDescriptorSetLayout fsr_edge_desc_layout;
+    vk::UniquePipelineLayout fsr_edge_pipeline_layout;
+    vk::UniquePipeline fsr_edge_pipeline;
     VideoCore::UniqueImage fsr_previous_image;
     vk::UniqueImageView fsr_previous_view;
     std::array<VideoCore::UniqueImage, 2> fsr_flag_image;

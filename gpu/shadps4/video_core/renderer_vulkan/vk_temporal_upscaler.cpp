@@ -21,6 +21,7 @@
 #include "video_core/host_shaders/upscale_merge_comp.h"
 #include "video_core/host_shaders/upscale_reactive_comp.h"
 #include "video_core/host_shaders/depth_remap_comp.h"
+#include "video_core/host_shaders/fsr_edge_comp.h"
 #include "video_core/host_shaders/fsr_reactive_comp.h"
 #include "video_core/host_shaders/ldr_alpha_comp.h"
 #include "video_core/host_shaders/taa_comp.h"
@@ -834,6 +835,24 @@ void TemporalUpscaler::CreatePipelines() {
             .setLayoutCount = 1, .pSetLayouts = &*fsr_reactive_desc_layout,
             .pushConstantRangeCount = 1, .pPushConstantRanges = &push}));
         fsr_reactive_pipeline = compute(FSR_REACTIVE_COMP, *fsr_reactive_pipeline_layout);
+    }
+    {
+        // FSR's unfiltered result and the mask (sampled), the smoothed result (storage)
+        const std::array<vk::DescriptorSetLayoutBinding, 3> bindings{{
+            {.binding = 0, .descriptorType = vk::DescriptorType::eSampledImage,
+             .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eCompute},
+            {.binding = 1, .descriptorType = vk::DescriptorType::eSampledImage,
+             .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eCompute},
+            {.binding = 2, .descriptorType = vk::DescriptorType::eStorageImage,
+             .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eCompute}}};
+        fsr_edge_desc_layout = Check(device.createDescriptorSetLayoutUnique({
+            .flags = vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR,
+            .bindingCount = u32(bindings.size()), .pBindings = bindings.data()}));
+        const vk::PushConstantRange push{vk::ShaderStageFlagBits::eCompute, 0, sizeof(float)};
+        fsr_edge_pipeline_layout = Check(device.createPipelineLayoutUnique({
+            .setLayoutCount = 1, .pSetLayouts = &*fsr_edge_desc_layout,
+            .pushConstantRangeCount = 1, .pPushConstantRanges = &push}));
+        fsr_edge_pipeline = compute(FSR_EDGE_COMP, *fsr_edge_pipeline_layout);
     }
     {
         // The game's alpha into the RGBA16F result: a sampled scene colour and a storage image.
@@ -1776,6 +1795,34 @@ void TemporalUpscaler::RunLdr() {
                             vk::PipelineStageFlagBits2::eCopy, vk::AccessFlagBits2::eTransferRead,
                             vk::ImageLayout::eGeneral, all, rw);
                 fsr_previous_valid = true;
+                // Edges of what the mask refuses history for (characters): smoothed from the copy, so
+                // the reference for the next frame stays unfiltered.
+                const float edge_strength =
+                    float(SpartanSettings::Get().fsr_edges.load()) / 100.0f;
+                if (edge_strength > 0.0f && fsr_mask_ran) {
+                    const vk::DescriptorImageInfo infos[3] = {
+                        {.imageView = *fsr_previous_view, .imageLayout = vk::ImageLayout::eGeneral},
+                        {.imageView = *reactive_view, .imageLayout = vk::ImageLayout::eGeneral},
+                        {.imageView = *output_view, .imageLayout = vk::ImageLayout::eGeneral}};
+                    const vk::DescriptorType types[3] = {vk::DescriptorType::eSampledImage,
+                                                         vk::DescriptorType::eSampledImage,
+                                                         vk::DescriptorType::eStorageImage};
+                    std::array<vk::WriteDescriptorSet, 3> writes{};
+                    for (u32 i = 0; i < 3; ++i) {
+                        writes[i] = {.dstBinding = i, .descriptorCount = 1,
+                                     .descriptorType = types[i], .pImageInfo = &infos[i]};
+                    }
+                    cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, *fsr_edge_pipeline);
+                    cmdbuf.pushDescriptorSetKHR(vk::PipelineBindPoint::eCompute,
+                                                *fsr_edge_pipeline_layout, 0, writes);
+                    cmdbuf.pushConstants(*fsr_edge_pipeline_layout,
+                                         vk::ShaderStageFlagBits::eCompute, 0, sizeof(edge_strength),
+                                         &edge_strength);
+                    cmdbuf.dispatch((w + 7) / 8, (h + 7) / 8, 1);
+                    own_barrier(vk::Image(output_image), vk::ImageLayout::eGeneral,
+                                vk::PipelineStageFlagBits2::eComputeShader,
+                                vk::AccessFlagBits2::eShaderWrite, vk::ImageLayout::eGeneral, all, rw);
+                }
             } else {
                 fsr_previous_valid = false;
             }

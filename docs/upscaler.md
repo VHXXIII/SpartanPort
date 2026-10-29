@@ -384,7 +384,15 @@ tonemapped detector is back. The menu slider "Moving objects" (`fsr_mask`, defau
 sensitivity: the mask starts at a luma difference of 0.03 / s (0.05 at 60%) and is full at twice that;
 0 turns the mask off (toggle `1 << 27` too). The debug checkbox of the FSR panel highlights the mask (it
 shows blue in the game: the scene colour's channel order). The mask is off for the first frame after a
-reset or a skipped scene. In-game tuning (test28, GTX 1070 Ti): 50-70% is the best compromise, below 50% Kratos ghosts, so the
+reset or a skipped scene. Moving object edges (`fsr_edge.comp`, slider `fsr_edges`, default 70%): where the mask refuses FSR's history a
+mover shows the single jittered sample of the current frame, i.e. stair-stepped edges. A 3-tap filter along
+the edge normal (the one of the TAA) is applied there only (weight = mask / 0.6 x Sobel edge strength),
+reading the unfiltered copy of FSR's result, so the reference of the next frame stays clean. Further mask
+tuning was tried in the simulator and is a plateau: start 0.04..0.06 and 0.2..0.35 kept without a flagged
+neighbour all land within 1 dB (moving 27-30 dB, static flicker 0.0012-0.0016); passing the same mask as
+FSR's transparency-and-composition mask gave nothing more than the reactive mask alone.
+
+In-game tuning (test28, GTX 1070 Ti): 50-70% is the best compromise, below 50% Kratos ghosts, so the
 default is 60%. The FSR panel has its own "Texture detail" (`fsr_lod`, default 0%, TAA keeps `taa_lod`
 75%): the negative mip bias did nothing visible on the environment (with anisotropic filtering the
 surfaces are already sampled at their finest detail) and only added shimmer on Kratos, who is skinned
