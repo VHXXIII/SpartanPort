@@ -829,7 +829,7 @@ void TemporalUpscaler::CreatePipelines() {
         fsr_reactive_desc_layout = Check(device.createDescriptorSetLayoutUnique({
             .flags = vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR,
             .bindingCount = u32(bindings.size()), .pBindings = bindings.data()}));
-        const vk::PushConstantRange push{vk::ShaderStageFlagBits::eCompute, 0, 8 * sizeof(float)};
+        const vk::PushConstantRange push{vk::ShaderStageFlagBits::eCompute, 0, 10 * sizeof(float)};
         fsr_reactive_pipeline_layout = Check(device.createPipelineLayoutUnique({
             .setLayoutCount = 1, .pSetLayouts = &*fsr_reactive_desc_layout,
             .pushConstantRangeCount = 1, .pPushConstantRanges = &push}));
@@ -837,16 +837,20 @@ void TemporalUpscaler::CreatePipelines() {
     }
     {
         // The game's alpha into the RGBA16F result: a sampled scene colour and a storage image.
-        const std::array<vk::DescriptorSetLayoutBinding, 2> bindings{{
+        const std::array<vk::DescriptorSetLayoutBinding, 3> bindings{{
             {.binding = 0, .descriptorType = vk::DescriptorType::eCombinedImageSampler,
              .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eCompute},
             {.binding = 1, .descriptorType = vk::DescriptorType::eStorageImage,
+             .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eCompute},
+            {.binding = 2, .descriptorType = vk::DescriptorType::eSampledImage,
              .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eCompute}}};
         ldr_alpha_desc_layout = Check(device.createDescriptorSetLayoutUnique({
             .flags = vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR,
             .bindingCount = u32(bindings.size()), .pBindings = bindings.data()}));
+        const vk::PushConstantRange alpha_push{vk::ShaderStageFlagBits::eCompute, 0, sizeof(u32)};
         ldr_alpha_pipeline_layout = Check(device.createPipelineLayoutUnique({
-            .setLayoutCount = 1, .pSetLayouts = &*ldr_alpha_desc_layout}));
+            .setLayoutCount = 1, .pSetLayouts = &*ldr_alpha_desc_layout,
+            .pushConstantRangeCount = 1, .pPushConstantRanges = &alpha_push}));
         ldr_alpha_pipeline = compute(LDR_ALPHA_COMP, *ldr_alpha_pipeline_layout);
     }
 }
@@ -1576,6 +1580,7 @@ void TemporalUpscaler::RunLdr() {
     last_frame = now;
 
     bool dispatched = false;
+    bool fsr_mask_ran = false;
     if (taa) {
         RecordTaa(cmdbuf, color_view, depth_view);
         dispatched = true;
@@ -1653,7 +1658,8 @@ void TemporalUpscaler::RunLdr() {
         // Reactive mask for what has no motion vector (characters): without it FSR smears them.
         // Toggle 1 << 27 turns it off.
         bool keep_fsr_result = false;
-        if (fsr_previous_view && !SpartanToggle::Disabled(1u << 27)) {
+        const int mask_percent = SpartanSettings::Get().fsr_mask.load();
+        if (fsr_previous_view && !SpartanToggle::Disabled(1u << 27) && mask_percent > 0) {
             const bool have_previous = fsr_previous_valid && !reset;
             const u32 flag_now = fsr_flag_next, flag_before = 1 - fsr_flag_next;
             fsr_flag_next = flag_before;
@@ -1689,10 +1695,14 @@ void TemporalUpscaler::RunLdr() {
                 writes[i] = {.dstBinding = i, .descriptorCount = 1, .descriptorType = types[i],
                              .pImageInfo = &infos[i]};
             }
-            // Thresholds from the simulator: difference 0.05..0.10 luma, 0.2 kept without a flagged
-            // neighbour in the last frame. The reference is FSR's result, so no jitter shift.
-            const float params[8] = {0.0f, 0.0f, 0.05f, 0.10f, 1.0f, 1.0f,
-                                     0.2f, have_previous ? 1.0f : 0.0f};
+            // The menu's "Moving objects" is the sensitivity: 75% starts the mask at a 25% luma change
+            // (simulator, bright and dark pictures), 100% at 15%; full at twice that. 0.2 of the mask
+            // is kept without a flagged neighbour in the last frame. The reference is FSR's result:
+            // no jitter shift.
+            const float sensitivity = float(mask_percent) / 100.0f;
+            const float low = 0.55f - 0.4f * sensitivity;
+            const float params[10] = {0.0f, 0.0f, low, 2.0f * low, 1.0f, 1.0f,
+                                      0.2f, have_previous ? 1.0f : 0.0f, 0.01f, 0.0f};
             cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, *fsr_reactive_pipeline);
             cmdbuf.pushDescriptorSetKHR(vk::PipelineBindPoint::eCompute,
                                         *fsr_reactive_pipeline_layout, 0, writes);
@@ -1709,6 +1719,7 @@ void TemporalUpscaler::RunLdr() {
                                          vk::ImageAspectFlagBits::eColor,
                                          FFX_VK_PORTABLE_RESOURCE_STATE_GENERIC_READ);
             keep_fsr_result = true;
+            fsr_mask_ran = true;
         }
         info.jitterOffset = {sign * jitter[0], sign * jitter[1]};
         info.motionVectorScale = {1.0f, 1.0f};
@@ -1793,15 +1804,25 @@ void TemporalUpscaler::RunLdr() {
                                                  .imageLayout = vk::ImageLayout::eGeneral};
         const vk::DescriptorImageInfo result_info{.imageView = *output_view,
                                                   .imageLayout = vk::ImageLayout::eGeneral};
-        const std::array<vk::WriteDescriptorSet, 2> writes{{
+        // Debug (menu): FSR's reactive mask in red. Otherwise any sampled image fills binding 2.
+        const bool show_mask = !taa && fsr_mask_ran && SpartanSettings::Get().taa_debug.load();
+        const vk::DescriptorImageInfo mask_info{
+            .imageView = show_mask ? *reactive_view : *output_view,
+            .imageLayout = vk::ImageLayout::eGeneral};
+        const std::array<vk::WriteDescriptorSet, 3> writes{{
             {.dstBinding = 0, .descriptorCount = 1,
              .descriptorType = vk::DescriptorType::eCombinedImageSampler,
              .pImageInfo = &scene_info},
             {.dstBinding = 1, .descriptorCount = 1,
-             .descriptorType = vk::DescriptorType::eStorageImage, .pImageInfo = &result_info}}};
+             .descriptorType = vk::DescriptorType::eStorageImage, .pImageInfo = &result_info},
+            {.dstBinding = 2, .descriptorCount = 1,
+             .descriptorType = vk::DescriptorType::eSampledImage, .pImageInfo = &mask_info}}};
+        const u32 alpha_mode = show_mask ? 1u : 0u;
         cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, *ldr_alpha_pipeline);
         cmdbuf.pushDescriptorSetKHR(vk::PipelineBindPoint::eCompute, *ldr_alpha_pipeline_layout,
                                     0, writes);
+        cmdbuf.pushConstants(*ldr_alpha_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0,
+                             sizeof(alpha_mode), &alpha_mode);
         cmdbuf.dispatch((w + 7) / 8, (h + 7) / 8, 1);
     }
     own_barrier(vk::Image(output_image), vk::ImageLayout::eGeneral,

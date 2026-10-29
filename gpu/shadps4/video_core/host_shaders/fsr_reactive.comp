@@ -3,10 +3,11 @@
 //
 // The game gives objects such as characters no motion vectors, so FSR keeps their history and smears
 // them. The current frame is compared with FSR's own result of the last frame (the accumulated, almost
-// aliasing-free picture). A static pixel differs from it by little, even on a jittered aliased texture
-// (sim: 0.01 luma), a mover by far more (0.09); the 3x3 patch average of the difference decides.
-// A pixel only counts as a mover when a neighbour was flagged in the last frame too: jitter makes
-// textured pixels fire now and then, a real mover fires frame after frame.
+// aliasing-free picture): the summed luma difference of a 3x3 patch relative to the patch's brightness,
+// so that dark scenes (Kratos, rock, lava) trigger like bright ones. A static pixel differs little even
+// on a jittered aliased texture, a mover far more. A pixel only counts as a mover when a neighbour was
+// flagged in the last frame too: jitter makes textured pixels fire now and then, a real mover fires
+// frame after frame.
 #version 450
 #extension GL_EXT_samplerless_texture_functions : require
 
@@ -21,17 +22,14 @@ layout(binding = 5, r8) uniform writeonly image2D flag_img;
 
 layout(push_constant) uniform Constants {
     vec2 sample_shift; // pixels: where this frame's jittered samples sit relative to the pixel grid
-    float low;         // luma difference where the mask starts
-    float high;        // luma difference where it is full
+    float low;         // relative luma difference where the mask starts
+    float high;        // relative luma difference where it is full
     float gain;
     float cap;         // largest mask value (0..1)
     float persist;     // mask share kept when no neighbour was flagged in the last frame
     float enabled;     // 0: no previous result (first frame, reset): mask off
+    float floor_luma;  // brightness added to the patch's, so near-black noise does not count
 };
-
-vec3 tonemap(vec3 c) {
-    return c / (1.0 + max(c.r, max(c.g, c.b)));
-}
 
 float luma(vec3 c) {
     return dot(c, vec3(0.299, 0.587, 0.114));
@@ -50,15 +48,16 @@ void main() {
     }
     const vec2 motion = texelFetch(motion_tex, p, 0).rg;
     const ivec2 q = p + ivec2(floor(motion + sample_shift + 0.5));
-    float diff = 0.0;
+    float diff = 0.0, brightness = 0.0;
     for (int y = -1; y <= 1; ++y) {
         for (int x = -1; x <= 1; ++x) {
-            const float c = luma(tonemap(texelFetch(color_tex, clamp(p + ivec2(x, y), ivec2(0), size - 1), 0).rgb));
-            const float h = luma(tonemap(texelFetch(previous_tex, clamp(q + ivec2(x, y), ivec2(0), size - 1), 0).rgb));
+            const float c = luma(texelFetch(color_tex, clamp(p + ivec2(x, y), ivec2(0), size - 1), 0).rgb);
+            const float h = luma(texelFetch(previous_tex, clamp(q + ivec2(x, y), ivec2(0), size - 1), 0).rgb);
             diff += abs(c - h);
+            brightness += 0.5 * (c + h);
         }
     }
-    float changed = smoothstep(low, high, diff / 9.0);
+    float changed = smoothstep(low, high, diff / (brightness + 9.0 * floor_luma));
     const bool fired = changed >= 0.5;
     bool before = false;
     for (int y = -1; y <= 1 && !before; ++y) {
