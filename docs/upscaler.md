@@ -360,6 +360,25 @@ skipping screen-space passes (3 or 4 indices) so a shifted full-screen quad leav
   moving objects 90%, edges 70%, texture detail 75%, sharpening 165%. They live in
   `shim/spartanport_settings.h` and in the menu hints.
 
+### FSR 3.1 Native AA (`fsr_reactive.comp`)
+
+FSR gets the same camera motion, remapped depth and jitter as TAA (`RunLdr`, `taa == false`). The
+game draws characters and foliage without motion vectors, so FSR alone smears them: in the simulator
+the moving-region PSNR is 18.8 dB (TAA ~27 dB) while static scenes are better than TAA (37.0 dB,
+frame flicker 0.0010 against TAA's 0.002).
+
+A reactive mask closes the gap. `fsr_reactive.comp` compares the 3x3 luma patch of this frame with
+FSR's own result of the last frame (the accumulated picture, copied before sharpening into
+`fsr_previous_image`): a static pixel differs by ~0.01 luma even on a jittered aliased texture, a mover
+by ~0.09, so the mask runs from 0.05 to 0.10. Like the TAA detector it needs a flagged neighbour in the
+last frame (two `R8` flag images ping-pong), otherwise only 20% of the mask is kept. Comparing with the
+previous *input* instead (jitter makes aliased textures differ) cost flicker 0.0051; with the previous
+FSR result it is 0.0012. Result of the simulator (aliased textures): static 36.8 dB, flicker 0.0012;
+moving objects 29.0 dB; slow camera 35.4 / 34.8 dB. Toggle `1 << 27` turns the mask off. The mask is off
+for the first frame after a reset or a skipped scene. The negative texture LOD bias (`taa_lod`) also
+applies to FSR. FSR's `DEPTH_INFINITE` flag and the context's extra sharpening were measured and left
+as they are (the in-game sharpening setting still applies).
+
 ### Simulator
 
 The tuning used a software renderer of a procedural scene (static, slow and fast camera, moving box)

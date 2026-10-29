@@ -21,6 +21,7 @@
 #include "video_core/host_shaders/upscale_merge_comp.h"
 #include "video_core/host_shaders/upscale_reactive_comp.h"
 #include "video_core/host_shaders/depth_remap_comp.h"
+#include "video_core/host_shaders/fsr_reactive_comp.h"
 #include "video_core/host_shaders/ldr_alpha_comp.h"
 #include "video_core/host_shaders/taa_comp.h"
 #include "video_core/host_shaders/taa_sharpen_comp.h"
@@ -647,6 +648,23 @@ bool TemporalUpscaler::EnsureResources(u32 w, u32 h, u32 ow, u32 oh, bool hdr) {
                    vk::ImageUsageFlagBits::eTransferSrc);
     make_image(reactive_image, reactive_view, vk::Format::eR8Unorm,
                vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled);
+    // FSR on the LDR frame: the last result and two flag images for the reactive mask.
+    fsr_previous_valid = false;
+    fsr_flag_next = 0;
+    fsr_previous_view.reset();
+    fsr_previous_image = VideoCore::UniqueImage{};
+    for (u32 i = 0; i < 2; ++i) {
+        fsr_flag_view[i].reset();
+        fsr_flag_image[i] = VideoCore::UniqueImage{};
+    }
+    if (!hdr && !use_taa && !use_fsr4) {
+        make_image(fsr_previous_image, fsr_previous_view, vk::Format::eR16G16B16A16Sfloat,
+                   vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst);
+        for (u32 i = 0; i < 2; ++i) {
+            make_image(fsr_flag_image[i], fsr_flag_view[i], vk::Format::eR8Unorm,
+                       vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled);
+        }
+    }
     for (u32 i = 0; i < taa_history.size(); ++i) {
         taa_history_views[i].reset();
         taa_history[i] = VideoCore::UniqueImage{};
@@ -790,6 +808,32 @@ void TemporalUpscaler::CreatePipelines() {
             .setLayoutCount = 1, .pSetLayouts = &*depth_remap_desc_layout,
             .pushConstantRangeCount = 1, .pPushConstantRanges = &push}));
         depth_remap_pipeline = compute(DEPTH_REMAP_COMP, *depth_remap_pipeline_layout);
+    }
+    {
+        // colour, last result, motion, last flags (sampled), mask and flags (storage)
+        const auto sampled = vk::DescriptorType::eSampledImage;
+        const auto storage = vk::DescriptorType::eStorageImage;
+        const std::array<vk::DescriptorSetLayoutBinding, 6> bindings{{
+            {.binding = 0, .descriptorType = sampled, .descriptorCount = 1,
+             .stageFlags = vk::ShaderStageFlagBits::eCompute},
+            {.binding = 1, .descriptorType = sampled, .descriptorCount = 1,
+             .stageFlags = vk::ShaderStageFlagBits::eCompute},
+            {.binding = 2, .descriptorType = sampled, .descriptorCount = 1,
+             .stageFlags = vk::ShaderStageFlagBits::eCompute},
+            {.binding = 3, .descriptorType = storage, .descriptorCount = 1,
+             .stageFlags = vk::ShaderStageFlagBits::eCompute},
+            {.binding = 4, .descriptorType = sampled, .descriptorCount = 1,
+             .stageFlags = vk::ShaderStageFlagBits::eCompute},
+            {.binding = 5, .descriptorType = storage, .descriptorCount = 1,
+             .stageFlags = vk::ShaderStageFlagBits::eCompute}}};
+        fsr_reactive_desc_layout = Check(device.createDescriptorSetLayoutUnique({
+            .flags = vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR,
+            .bindingCount = u32(bindings.size()), .pBindings = bindings.data()}));
+        const vk::PushConstantRange push{vk::ShaderStageFlagBits::eCompute, 0, 8 * sizeof(float)};
+        fsr_reactive_pipeline_layout = Check(device.createPipelineLayoutUnique({
+            .setLayoutCount = 1, .pSetLayouts = &*fsr_reactive_desc_layout,
+            .pushConstantRangeCount = 1, .pPushConstantRanges = &push}));
+        fsr_reactive_pipeline = compute(FSR_REACTIVE_COMP, *fsr_reactive_pipeline_layout);
     }
     {
         // The game's alpha into the RGBA16F result: a sampled scene colour and a storage image.
@@ -1606,6 +1650,66 @@ void TemporalUpscaler::RunLdr() {
         info.transparencyAndCompositionMask.structSize =
             sizeof(info.transparencyAndCompositionMask);
         const float sign = SpartanToggle::Disabled(1u << 26) ? -1.0f : 1.0f;
+        // Reactive mask for what has no motion vector (characters): without it FSR smears them.
+        // Toggle 1 << 27 turns it off.
+        bool keep_fsr_result = false;
+        if (fsr_previous_view && !SpartanToggle::Disabled(1u << 27)) {
+            const bool have_previous = fsr_previous_valid && !reset;
+            const u32 flag_now = fsr_flag_next, flag_before = 1 - fsr_flag_next;
+            fsr_flag_next = flag_before;
+            for (const auto& flag : fsr_flag_image) {
+                // The flags of the last frame are read: keep them when there is a last frame.
+                own_barrier(vk::Image(flag),
+                            have_previous ? vk::ImageLayout::eGeneral : vk::ImageLayout::eUndefined,
+                            all, have_previous ? rw : vk::AccessFlags2{vk::AccessFlagBits2::eNone},
+                            vk::ImageLayout::eGeneral, all, rw);
+            }
+            own_barrier(vk::Image(reactive_image), vk::ImageLayout::eUndefined, all,
+                        vk::AccessFlagBits2::eNone, vk::ImageLayout::eGeneral, all, rw);
+            if (have_previous) {
+                own_barrier(vk::Image(fsr_previous_image), vk::ImageLayout::eGeneral, all, rw,
+                            vk::ImageLayout::eGeneral, all, rw);
+            } else {
+                own_barrier(vk::Image(fsr_previous_image), vk::ImageLayout::eUndefined, all,
+                            vk::AccessFlagBits2::eNone, vk::ImageLayout::eGeneral, all, rw);
+            }
+            const vk::DescriptorImageInfo infos[6] = {
+                {.imageView = color_view, .imageLayout = vk::ImageLayout::eGeneral},
+                {.imageView = *fsr_previous_view, .imageLayout = vk::ImageLayout::eGeneral},
+                {.imageView = *motion_view, .imageLayout = vk::ImageLayout::eGeneral},
+                {.imageView = *reactive_view, .imageLayout = vk::ImageLayout::eGeneral},
+                {.imageView = *fsr_flag_view[flag_before], .imageLayout = vk::ImageLayout::eGeneral},
+                {.imageView = *fsr_flag_view[flag_now], .imageLayout = vk::ImageLayout::eGeneral}};
+            const vk::DescriptorType types[6] = {
+                vk::DescriptorType::eSampledImage, vk::DescriptorType::eSampledImage,
+                vk::DescriptorType::eSampledImage, vk::DescriptorType::eStorageImage,
+                vk::DescriptorType::eSampledImage, vk::DescriptorType::eStorageImage};
+            std::array<vk::WriteDescriptorSet, 6> writes{};
+            for (u32 i = 0; i < 6; ++i) {
+                writes[i] = {.dstBinding = i, .descriptorCount = 1, .descriptorType = types[i],
+                             .pImageInfo = &infos[i]};
+            }
+            // Thresholds from the simulator: difference 0.05..0.10 luma, 0.2 kept without a flagged
+            // neighbour in the last frame. The reference is FSR's result, so no jitter shift.
+            const float params[8] = {0.0f, 0.0f, 0.05f, 0.10f, 1.0f, 1.0f,
+                                     0.2f, have_previous ? 1.0f : 0.0f};
+            cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, *fsr_reactive_pipeline);
+            cmdbuf.pushDescriptorSetKHR(vk::PipelineBindPoint::eCompute,
+                                        *fsr_reactive_pipeline_layout, 0, writes);
+            cmdbuf.pushConstants(*fsr_reactive_pipeline_layout, vk::ShaderStageFlagBits::eCompute,
+                                 0, sizeof(params), params);
+            cmdbuf.dispatch((w + 7) / 8, (h + 7) / 8, 1);
+            own_barrier(vk::Image(reactive_image), vk::ImageLayout::eGeneral,
+                        vk::PipelineStageFlagBits2::eComputeShader,
+                        vk::AccessFlagBits2::eShaderWrite, vk::ImageLayout::eGeneral, all,
+                        vk::AccessFlagBits2::eShaderRead);
+            info.reactiveMask = Describe(vk::Image(reactive_image), vk::Format::eR8Unorm, w, h,
+                                         vk::ImageUsageFlagBits::eStorage |
+                                             vk::ImageUsageFlagBits::eSampled,
+                                         vk::ImageAspectFlagBits::eColor,
+                                         FFX_VK_PORTABLE_RESOURCE_STATE_GENERIC_READ);
+            keep_fsr_result = true;
+        }
         info.jitterOffset = {sign * jitter[0], sign * jitter[1]};
         info.motionVectorScale = {1.0f, 1.0f};
         info.renderSize = {w, h};
@@ -1639,10 +1743,35 @@ void TemporalUpscaler::RunLdr() {
             skip_reason = "fsr_dispatch";
         } else {
             dispatched = true;
+            if (keep_fsr_result) {
+                // FSR's own result (before sharpening) is next frame's reference for the mask.
+                own_barrier(vk::Image(output_image), vk::ImageLayout::eGeneral, all, rw,
+                            vk::ImageLayout::eGeneral, vk::PipelineStageFlagBits2::eCopy,
+                            vk::AccessFlagBits2::eTransferRead);
+                own_barrier(vk::Image(fsr_previous_image), vk::ImageLayout::eGeneral, all, rw,
+                            vk::ImageLayout::eGeneral, vk::PipelineStageFlagBits2::eCopy,
+                            vk::AccessFlagBits2::eTransferWrite);
+                const vk::ImageCopy copy{
+                    .srcSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
+                    .dstSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
+                    .extent = {w, h, 1}};
+                cmdbuf.copyImage(vk::Image(output_image), vk::ImageLayout::eGeneral,
+                                 vk::Image(fsr_previous_image), vk::ImageLayout::eGeneral, copy);
+                own_barrier(vk::Image(fsr_previous_image), vk::ImageLayout::eGeneral,
+                            vk::PipelineStageFlagBits2::eCopy, vk::AccessFlagBits2::eTransferWrite,
+                            vk::ImageLayout::eGeneral, all, rw);
+                own_barrier(vk::Image(output_image), vk::ImageLayout::eGeneral,
+                            vk::PipelineStageFlagBits2::eCopy, vk::AccessFlagBits2::eTransferRead,
+                            vk::ImageLayout::eGeneral, all, rw);
+                fsr_previous_valid = true;
+            } else {
+                fsr_previous_valid = false;
+            }
             ExtraSharpen(cmdbuf, vk::Image(output_image), false, w, h);
         }
     }
     if (!dispatched) {
+        fsr_previous_valid = false; // flags and result of this frame are not a reference
         return; // the scene colour stays as the game made it
     }
     reset = false;

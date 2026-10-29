@@ -320,6 +320,18 @@ private:
     VideoCore::UniqueImage depth_ndc_image;
     vk::UniqueImageView depth_ndc_view;
     u32 depth_ndc_width = 0, depth_ndc_height = 0;
+    // FSR on the LDR frame: a reactive mask for what has no motion vector (characters), made against
+    // FSR's own result of the last frame. See fsr_reactive.comp.
+    vk::UniqueDescriptorSetLayout fsr_reactive_desc_layout;
+    vk::UniquePipelineLayout fsr_reactive_pipeline_layout;
+    vk::UniquePipeline fsr_reactive_pipeline;
+    VideoCore::UniqueImage fsr_previous_image;
+    vk::UniqueImageView fsr_previous_view;
+    std::array<VideoCore::UniqueImage, 2> fsr_flag_image;
+    std::array<vk::UniqueImageView, 2> fsr_flag_view;
+    u32 fsr_flag_next = 0;
+    bool fsr_previous_valid = false; ///< fsr_previous_image holds the last frame's FSR result
+    u32 fsr_images_width = 0, fsr_images_height = 0;
     vk::UniqueDescriptorSetLayout ldr_alpha_desc_layout;
     vk::UniquePipelineLayout ldr_alpha_pipeline_layout;
     vk::UniquePipeline ldr_alpha_pipeline;
