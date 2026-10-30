@@ -13,6 +13,7 @@
 #include "common/types.h"
 #include "imgui/renderer/imgui_core.h"
 #include "sdl_window.h"
+#include "spartanport_settings.h"
 #include "video_core/amdgpu/spartanport_msaa.h"
 #include "video_core/amdgpu/spartanport_msaa_default.h"
 #include "video_core/renderer_vulkan/liverpool_to_vk.h"
@@ -815,9 +816,12 @@ void Instance::CollectDeviceParameters() {
     // a chosen temporal mode turns the game's own multisampling off unless it is forced on.
     const char* temporal_env = std::getenv("SPARTAN_UPSCALER");
     const char* temporal_on = std::getenv("SPARTAN_EXPERIMENTAL_UPSCALER");
-    const bool temporal_mode = temporal_env && temporal_on && *temporal_on == '1' &&
-                               (std::strcmp(temporal_env, "taa") == 0 ||
-                                std::strcmp(temporal_env, "fsr3") == 0);
+    // The port's TAA is also chosen by the launcher in spartanport.ini (upscaler=taa; settings are
+    // loaded before the device), without any environment variable.
+    const bool temporal_mode =
+        SpartanSettings::Get().upscaler == SpartanSettings::UpscalerTaa ||
+        (temporal_env && temporal_on && *temporal_on == '1' &&
+         (std::strcmp(temporal_env, "taa") == 0 || std::strcmp(temporal_env, "fsr3") == 0));
     const bool no_msaa = no_msaa_env && *no_msaa_env
                              ? *no_msaa_env == '1'
                              : temporal_mode ||
