@@ -33,6 +33,14 @@
 
 namespace Vulkan {
 
+static u32 UiColorMask(const GraphicsPipeline* pipeline, bool upscale) {
+    const auto& key = pipeline->GetGraphicsKey();
+    return upscale && key.mrt_mask == 3
+        ? UiComposition::ColorMask(pipeline->GetStage(Shader::SwStage::Fragment).pgm_hash,
+                                    key.mrt_mask, key.blend_controls[1])
+        : key.mrt_mask;
+}
+
 static Shader::PushData MakeUserData(const AmdGpu::Regs& regs) {
     // TODO(roamic): Add support for multiple viewports and geometry shaders when ViewportIndex
     // is encountered and implemented in the recompiler.
@@ -225,6 +233,7 @@ VideoCore::ImageId Rasterizer::FindTargetMemoized(VideoCore::TextureCache::Image
 void Rasterizer::PrepareRenderState(const GraphicsPipeline* pipeline) {
     // Prefetch render targets to handle overlaps with bound textures (e.g. mipgen)
     const auto& key = pipeline->GetGraphicsKey();
+    const u32 color_mask = UiColorMask(pipeline, upscaler->Enabled());
     const auto& regs = Regs();
     if (regs.color_control.degamma_enable) {
         LOG_WARNING(Render_Vulkan, "Color buffers require gamma correction");
@@ -236,7 +245,7 @@ void Rasterizer::PrepareRenderState(const GraphicsPipeline* pipeline) {
         auto& [image_id, desc] = cb_descs[cb];
         const auto& col_buf = regs.color_buffers[cb];
         const u32 target_mask = regs.color_target_mask.GetMask(cb);
-        if (skip_cb_binding || !col_buf || !target_mask || (key.mrt_mask & (1 << cb)) == 0) {
+        if (skip_cb_binding || !col_buf || !target_mask || (color_mask & (1 << cb)) == 0) {
             image_id = {};
             continue;
         }
@@ -272,44 +281,62 @@ void Rasterizer::PrepareRenderState(const GraphicsPipeline* pipeline) {
     if (gbuffer_draw) {
         camera_motion->OnGBufferPass(db_desc.first);
     }
-    // spartanport (God of War III): the depth pre-pass: no colour target and a screen-sized depth
-    // (not the square shadow maps). Its depth is the scene depth, its vertex constants hold the
-    // main camera as a view-projection matrix (BindBuffers looks for it by content).
     scan_camera = false;
-    if (camera_motion->Enabled() && db_desc.first) {
-        bool no_color = true;
-        for (s32 cb = 0; cb < std::bit_width(key.mrt_mask); ++cb) {
-            no_color &= !cb_descs[cb].first;
-        }
-        const auto& depth = texture_cache.GetImage(db_desc.first);
-        const u32 depth_w = depth.info.size.width, depth_h = depth.info.size.height;
-        static u32 logged = 0;
-        if (no_color && depth_w >= 1000 && logged < 12 && regs.num_indices > 6) {
-            ++logged; // once: what the depth-only draws look like (last_run.log)
-            std::printf("Camera motion: depth-only draw %u: depth %ux%u indices %u mrt %x\n",
-                        logged, depth_w, depth_h, u32(regs.num_indices), u32(key.mrt_mask));
-        }
-        if (no_color && depth_w >= 1280 && depth_h >= 720 && depth_w * 10 > depth_h * 13) {
-            const auto& vp = regs.viewports[0];
-            const auto& vp_ctl = regs.viewport_control;
-            static u32 depth_range_logs = 0;
-            if (depth_range_logs < 3 && depth_range_logs++ >= 0) {
-                std::printf("Camera motion: depth range scale %g offset %g (scale enable %u)\n",
-                            vp.zscale, vp.zoffset, u32(vp_ctl.zscale_enable));
+    prepass_depth = {};
+    if (upscaler->SceneTaa()) {
+        // spartanport (God of War III): the depth pre-pass: no colour target and a screen-sized depth
+        // (not the square shadow maps). Its depth is the scene depth, its vertex constants hold the
+        // main camera as a view-projection matrix (BindBuffers looks for it by content).
+        if (camera_motion->Enabled() && db_desc.first) {
+            bool no_color = true;
+            for (s32 cb = 0; cb < std::bit_width(key.mrt_mask); ++cb) {
+                no_color &= !cb_descs[cb].first;
             }
-            scan_camera = camera_motion->OnScenePrepass(
-                db_desc.first, {vp_ctl.xscale_enable ? vp.xscale : 1.0f,
-                                vp_ctl.yscale_enable ? vp.yscale : 1.0f,
-                                vp_ctl.xoffset_enable ? vp.xoffset : 0.0f,
-                                vp_ctl.yoffset_enable ? vp.yoffset : 0.0f},
-                {vp_ctl.zscale_enable ? vp.zscale : 1.0f,
-                 vp_ctl.zoffset_enable ? vp.zoffset : 0.0f});
-            scan_size = {depth_w, depth_h};
-            scene_depth_address = regs.depth_buffer.DepthAddress();
-            if (camera_motion->TakeSceneStart() && upscaler->Enabled()) {
-                // One jitter per scene, for its draws, the motion shader and the TAA pass alike.
-                upscaler->OnSceneStart();
-                camera_motion->SetJitter(upscaler->Jitter());
+            const auto& depth = texture_cache.GetImage(db_desc.first);
+            const u32 depth_w = depth.info.size.width, depth_h = depth.info.size.height;
+            static u32 logged = 0;
+            if (no_color && depth_w >= 1000 && logged < 12 && regs.num_indices > 6) {
+                ++logged; // once: what the depth-only draws look like (last_run.log)
+                std::printf("Camera motion: depth-only draw %u: depth %ux%u indices %u mrt %x\n",
+                            logged, depth_w, depth_h, u32(regs.num_indices), u32(key.mrt_mask));
+            }
+            if (no_color && depth_w >= 1280 && depth_h >= 720 && depth_w * 10 > depth_h * 13) {
+                const auto& vp = regs.viewports[0];
+                const auto& vp_ctl = regs.viewport_control;
+                static u32 depth_range_logs = 0;
+                if (depth_range_logs < 3 && depth_range_logs++ >= 0) {
+                    std::printf("Camera motion: depth range scale %g offset %g (scale enable %u)\n",
+                                vp.zscale, vp.zoffset, u32(vp_ctl.zscale_enable));
+                }
+                scan_camera = camera_motion->OnScenePrepass(
+                    db_desc.first, {vp_ctl.xscale_enable ? vp.xscale : 1.0f,
+                                    vp_ctl.yscale_enable ? vp.yscale : 1.0f,
+                                    vp_ctl.xoffset_enable ? vp.xoffset : 0.0f,
+                                    vp_ctl.yoffset_enable ? vp.yoffset : 0.0f},
+                    {vp_ctl.zscale_enable ? vp.zscale : 1.0f,
+                     vp_ctl.zoffset_enable ? vp.zoffset : 0.0f});
+                scan_size = {depth_w, depth_h};
+                scene_depth_address = regs.depth_buffer.DepthAddress();
+                if (camera_motion->TakeSceneStart() && upscaler->Enabled()) {
+                    // One jitter per scene, for its draws, the motion shader and the TAA pass alike.
+                    upscaler->OnSceneStart();
+                    camera_motion->SetJitter(upscaler->Jitter());
+                }
+            }
+        }
+    } else {
+        // SpartanPort has no G-buffer: its depth pre-pass (no color target bound, its color slot may be
+        // declared; depth written at the render size; shadow cascades are square) binds the
+        // camera's view-projection in vertex slot 1.
+        bool color_bound = false;
+        for (s32 cb = 0; cb < std::bit_width(key.mrt_mask); ++cb) {
+            color_bound |= bool(cb_descs[cb].first);
+        }
+        if (camera_motion->Enabled() && !color_bound && db_desc.first &&
+            regs.depth_control.depth_write_enable) {
+            const auto& depth = texture_cache.GetImage(db_desc.first);
+            if (depth.info.size.width > depth.info.size.height) {
+                prepass_depth = db_desc.first;
             }
         }
     }
@@ -317,7 +344,7 @@ void Rasterizer::PrepareRenderState(const GraphicsPipeline* pipeline) {
         upscaler->OnColorTarget(cb_descs[0].first);
     }
     // spartanport: scene color: a full-size RGBA16F target drawn with the scene depth.
-    if (upscaler->Enabled() && db_desc.first && db_desc.first == camera_motion->Depth() &&
+    if (upscaler->Enabled() && JitteredDepth(db_desc.first) &&
         cb_descs[0].first && std::popcount(key.mrt_mask) <= 2) {
         const auto& color = texture_cache.GetImage(cb_descs[0].first);
         const auto& depth = texture_cache.GetImage(db_desc.first);
@@ -325,19 +352,37 @@ void Rasterizer::PrepareRenderState(const GraphicsPipeline* pipeline) {
             color.info.size.width == depth.info.size.width &&
             color.info.size.height == depth.info.size.height) {
             upscaler->OnSceneColor(cb_descs[0].first);
-            // Blended geometry without depth writes (not full-screen passes): transparents and
+            // Blended geometry without depth writes, including single quads: transparents and
             // effects start. Blended layers writing depth (decals, wet/blood ground) are
             // surfaces and stay in the history.
             if (regs.blend_control[0].enable && !regs.color_buffers[0].info.blend_bypass &&
-                !regs.depth_control.depth_write_enable &&
-                (regs.num_indices > 6 || regs.num_instances.NumInstances() > 1)) {
+                !regs.depth_control.depth_write_enable) {
                 upscaler->OnBlendedSceneDraw();
-            } else if (regs.num_indices <= 6 && regs.num_instances.NumInstances() <= 1) {
-                // A full-screen pass over the scene (the fog composite): the transparents are in.
-                upscaler->OnSceneComposite();
             }
         }
     }
+}
+
+bool Rasterizer::JitteredDepth(VideoCore::ImageId depth) {
+    if (upscaler->SceneTaa()) {
+        return depth && upscaler->JitterDepth(depth); // the scene TAA's own rule
+    }
+    const auto scene = camera_motion->Depth();
+    if (!depth || !scene) {
+        return false;
+    }
+    if (depth == scene) {
+        return true;
+    }
+    // SpartanPort draws its characters and effects with a second scene-size depth target (passes
+    // #41-#43 of frame_20261024-233122_3.txt): unjittered, FSR would shift them every frame.
+    if (!camera_motion->PrepassCamera() || !upscaler->SceneOpen()) {
+        return false;
+    }
+    const auto& a = texture_cache.GetImage(depth);
+    const auto& b = texture_cache.GetImage(scene);
+    return a.info.size.width == b.info.size.width && a.info.size.height == b.info.size.height &&
+           a.info.pixel_format == b.info.pixel_format;
 }
 
 static std::pair<u32, u32> GetDrawOffsets(
@@ -1100,21 +1145,36 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
     DiagPassBoundary(false);
     const auto& regs = Regs();
     // spartanport: the pass copying a finished frame to a display buffer; the previous draw's
-    // target is that frame. God of War III's display pass has two draws: the frame starts once.
-    const bool display_draw = regs.color_buffers[0] &&
-                              FrameCapture::IsDisplayBuffer(regs.color_buffers[0].Address());
+    // target is that frame. SpartanPort copies with two draws and draws its HUD there too: the
+    // frame starts once per display pass (scene TAA) or per display buffer (everything else), a
+    // second start would drop the camera history every frame.
+    const auto display_address = regs.color_buffers[0].Address();
+    const bool display_draw = regs.color_buffers[0] && FrameCapture::IsDisplayBuffer(display_address);
     const bool new_display_pass = display_draw && !in_display_pass;
     in_display_pass = display_draw;
-    // The game repeats a finished frame at 30 fps: a display pass without a scene (no composite
-    // since the last one) neither restarts the upscaler nor advances the jitter.
-    const bool repeated_frame = new_display_pass && camera_motion->Enabled() &&
-                                camera_motion->ViewProjectionCamera() && !upscaler->CompositePassed();
-    if (repeated_frame) {
-        camera_motion->OnDisplayPass(cb_descs[0].first);
-    } else if (camera_motion->Enabled() && new_display_pass) {
+    const bool new_display_buffer = display_draw && display_address != last_display_buffer;
+    bool start_frame = false;
+    if (upscaler->SceneTaa()) {
+        // The game repeats a finished frame at 30 fps: a display pass without a scene (no composite
+        // since the last one) neither restarts the upscaler nor advances the jitter.
+        const bool repeated_frame = new_display_pass && camera_motion->Enabled() &&
+                                    camera_motion->ViewProjectionCamera() &&
+                                    !upscaler->CompositePassed();
+        if (repeated_frame) {
+            camera_motion->OnDisplayPass(cb_descs[0].first);
+        }
+        start_frame = camera_motion->Enabled() && new_display_pass && !repeated_frame;
+    } else {
+        start_frame = camera_motion->Enabled() && new_display_buffer;
+    }
+    if (new_display_buffer) {
+        last_display_buffer = display_address;
+    }
+    if (start_frame) {
         scene_started = false;
+        const bool upscaler_changed = upscaler->OnFrameStart();
         camera_motion->OnDisplayPass(cb_descs[0].first);
-        if (upscaler->OnFrameStart()) {
+        if (upscaler_changed) {
             object_motion->InvalidateHistory();
             camera_motion->InvalidateHistory();
         }
@@ -1124,13 +1184,10 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
         static const char* scene_debug = std::getenv("SPARTAN_SCENE_DEBUG");
         scene_debug_frame = scene_debug && std::remove(scene_debug) == 0;
         scene_targets->debug = scene_debug_frame;
-    } else if (regs.color_buffers[0] &&
-               FrameCapture::IsDisplayBuffer(regs.color_buffers[0].Address()) &&
-               regs.color_buffers[0].Address() != last_display_buffer) {
+    } else if (!camera_motion->Enabled() && new_display_buffer) {
         // Without an upscaler: still count the frame (SPARTAN_GPU_PROFILE, SPARTAN_BUFFER_STATS),
         // once per display buffer since the HUD draws into it as well.
         // ponytail: assumes flips rotate display buffers; a single-buffer game counts one frame.
-        last_display_buffer = regs.color_buffers[0].Address();
         NoteFrameStart();
     }
     bind_prepared = used_prepared;
@@ -1138,7 +1195,11 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
     motion_geometry = 0;
 
     PrepareRenderState(pipeline);
-    if (upscaler->Enabled() && std::popcount(pipeline->GetGraphicsKey().mrt_mask) == 1) {
+    if (upscaler->Enabled() && pipeline->GetGraphicsKey().mrt_mask) {
+        upscaler->OnGraphicsDraw(pipeline->GetStage(Shader::SwStage::Fragment).pgm_hash,
+                                 cb_descs[0].first);
+    }
+    if (upscaler->Enabled() && std::popcount(UiColorMask(pipeline, true)) == 1) {
         const auto& viewport = Regs().viewports[0];
         upscaler->OnDraw(pipeline->GetStage(Shader::SwStage::Vertex).pgm_hash,
                          cb_descs[0].first, db_desc.first,
@@ -1268,14 +1329,18 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
     // triangle (3 indices) or a strip quad (4); its sky and sun glow are quads of 6 indices that
     // belong to the world and must move with the jitter like the rest of the scene.
     draw_jitter = {};
-    if (upscaler->Enabled() && db_desc.first && upscaler->JitterDepth(db_desc.first)) {
-        if (regs.num_indices > (camera_motion->ViewProjectionCamera() ? 4u : 6u) ||
-            regs.num_instances.NumInstances() > 1) {
+    if (upscaler->Enabled() && JitteredDepth(db_desc.first)) {
+        if (upscaler->SceneTaa()) {
+            if (regs.num_indices > (camera_motion->ViewProjectionCamera() ? 4u : 6u) ||
+                regs.num_instances.NumInstances() > 1) {
+                draw_jitter = upscaler->Jitter();
+                upscaler->NoteJitterDraw(regs.IsClipDisabled() ? 2u
+                                         : (draw_jitter[0] != 0.0f || draw_jitter[1] != 0.0f) ? 0u : 3u);
+            } else {
+                upscaler->NoteJitterDraw(1);
+            }
+        } else if (regs.num_indices > 6 || regs.num_instances.NumInstances() > 1) {
             draw_jitter = upscaler->Jitter();
-            upscaler->NoteJitterDraw(regs.IsClipDisabled() ? 2u
-                                     : (draw_jitter[0] != 0.0f || draw_jitter[1] != 0.0f) ? 0u : 3u);
-        } else {
-            upscaler->NoteJitterDraw(1);
         }
     }
     UpdateDynamicState(pipeline, is_indexed);
@@ -1374,7 +1439,11 @@ void Rasterizer::DrawIndirectRecord(const GraphicsPipeline* pipeline, bool is_in
     motion_geometry = 0;
     upscaler->RunPending();
     PrepareRenderState(pipeline);
-    if (upscaler->Enabled() && std::popcount(pipeline->GetGraphicsKey().mrt_mask) == 1) {
+    if (upscaler->Enabled() && pipeline->GetGraphicsKey().mrt_mask) {
+        upscaler->OnGraphicsDraw(pipeline->GetStage(Shader::SwStage::Fragment).pgm_hash,
+                                 cb_descs[0].first);
+    }
+    if (upscaler->Enabled() && std::popcount(UiColorMask(pipeline, true)) == 1) {
         const auto& viewport = Regs().viewports[0];
         upscaler->OnDraw(pipeline->GetStage(Shader::SwStage::Vertex).pgm_hash,
                          cb_descs[0].first, db_desc.first,
@@ -1412,7 +1481,7 @@ void Rasterizer::DrawIndirectRecord(const GraphicsPipeline* pipeline, bool is_in
     push_data.yoffset *= target_scale[1];
     pipeline->BindResources(set_writes, push_data);
     draw_jitter = {};
-    if (upscaler->Enabled() && db_desc.first && upscaler->JitterDepth(db_desc.first)) {
+    if (upscaler->Enabled() && JitteredDepth(db_desc.first)) {
         draw_jitter = upscaler->Jitter();
         upscaler->NoteJitterDraw(Regs().IsClipDisabled() ? 2u
                                  : (draw_jitter[0] != 0.0f || draw_jitter[1] != 0.0f) ? 0u : 3u);
@@ -1478,6 +1547,8 @@ void Rasterizer::DispatchRecord(const ComputePipeline* pipeline) {
     FrameCapture::Poll();
     gbuffer_draw = false;
     upscaler->RunPending();
+    prepass_depth = {};
+    scan_camera = false;
 
     scheduler.PopPendingOperations();
     DiagPassBoundary(true);
@@ -2303,6 +2374,11 @@ void Rasterizer::BindBuffers(const Shader::Info& stage, const PreparedStage* pre
                         reinterpret_cast<const float*>(constant_ring->Data(ring->offset)),
                         u32(ring->size), scan_size[0], scan_size[1], 0);
                 }
+                if (prepass_depth && buffer_index == 1 && ring->size >= 64 &&
+                    stage.sw_stage == Shader::SwStage::Vertex) {
+                    camera_motion->OnViewProjection(
+                        reinterpret_cast<const float*>(constant_ring->Data(ring->offset)), prepass_depth);
+                }
                 push_data.AddOffset(binding.buffer, 0);
             }
             buffer_infos.emplace_back(constant_ring->Handle(), ring->offset, ring->size);
@@ -2377,6 +2453,12 @@ void Rasterizer::BindBuffers(const Shader::Info& stage, const PreparedStage* pre
                 camera_motion->OnCameraCandidate(
                     reinterpret_cast<const float*>(vsharp.base_address), u32(vsharp.GetSize()),
                     scan_size[0], scan_size[1], 1);
+            }
+            if (prepass_depth && buffer_index == 1 && vsharp.GetSize() >= 64 &&
+                stage.sw_stage == Shader::SwStage::Vertex &&
+                memory->IsValidGpuMapping(vsharp.base_address, 0)) {
+                camera_motion->OnViewProjection(reinterpret_cast<const float*>(vsharp.base_address),
+                                                prepass_depth);
             }
             // Object motion research: the vertex shader buffers of G-buffer draws.
             if (FrameCapture::Active() && gbuffer_draw && stage.sw_stage == Shader::SwStage::Vertex &&
@@ -2910,7 +2992,12 @@ bool Rasterizer::BindTexturesFromSet(const Shader::Info& stage, const PreparedSt
 
 RenderState Rasterizer::BeginRendering(const GraphicsPipeline* pipeline) {
     // spartanport: RenderStateMemo (see BeginMemo).
-    const bool memo_on = !SpartanToggle::Disabled(SpartanToggle::RenderStateMemo) && !FrameCapture::Active();
+    // Display composition depends on this draw's sampled source, beyond the attachment memo key.
+    const auto& draw_regs = Regs();
+    const bool display_draw = upscaler->Enabled() && draw_regs.color_buffers[0] &&
+        FrameCapture::IsDisplayBuffer(draw_regs.color_buffers[0].Address());
+    const bool memo_on = !SpartanToggle::Disabled(SpartanToggle::RenderStateMemo) &&
+                         !FrameCapture::Active() && !display_draw;
     if (SpartanStats::enabled && ((begin_memo_hits + begin_memo_misses) & 0x3FFFF) == 0x3FFFF) {
         std::printf("Render state memo: %llu hits, %llu misses; texture sets: %llu hits, %llu "
                     "misses\n",
@@ -3114,7 +3201,14 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
         }
         image->usage.render_target = 1u;
         if (cb == 0 && upscaler->Enabled()) {
-            color_redirected = upscaler->RedirectColor(image_id, desc.view_info, redirect);
+            const auto& blend = key.blend_controls[0];
+            const bool replaces_color = !blend.enable ||
+                (blend.color_src_factor == AmdGpu::BlendControl::BlendFactor::One &&
+                 blend.color_dst_factor == AmdGpu::BlendControl::BlendFactor::Zero &&
+                 blend.color_func == AmdGpu::BlendControl::BlendFunc::Add);
+            color_redirected = upscaler->RedirectColor(image_id, desc.view_info, redirect,
+                pipeline->GetStage(Shader::SwStage::Fragment).pgm_hash, replaces_color,
+                bool(db_desc.first));
             if (color_redirected) {
                 guest_extent = {image->info.size.width, image->info.size.height};
                 original_color = {attachment.image_view, attachment.image_layout};

@@ -85,6 +85,54 @@ fn save(state: &mut State) {
     send(state, Message::Save);
 }
 
+#[test]
+fn saving_persists_the_fixed_frame_generation_multiplier() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut state = state_in(dir.path());
+    set(&mut state, "frame_generation", json!("fsr"));
+    save(&mut state);
+    let ini = load_ini(&state.paths.ini_path());
+    assert!(ini.holds("frame_generation_frames"));
+    assert_eq!(ini.values["frame_generation_frames"], "1");
+    assert_eq!(ini.values["frame_generation"], "fsr");
+}
+
+#[test]
+fn saving_normalizes_legacy_frame_generation_multipliers() {
+    for frames in ["1", "2", "3", "9"] {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("spartanport.ini"),
+            format!("frame_generation=fsr\nframe_generation_frames={frames}\nexternal_runtime_key=keep\n"),
+        )
+        .unwrap();
+        let mut state = state_in(dir.path());
+        save(&mut state);
+        let ini = load_ini(&state.paths.ini_path());
+        assert_eq!(ini.values["frame_generation_frames"], "1", "{frames}");
+        assert_eq!(ini.values["frame_generation"], "fsr");
+        assert_eq!(ini.values["external_runtime_key"], "keep");
+    }
+}
+
+#[test]
+fn saving_normalizes_an_externally_changed_frame_generation_multiplier() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut state = state_in(dir.path());
+    save(&mut state);
+    fs::write(
+        state.paths.ini_path(),
+        "frame_generation=fsr\nframe_generation_frames=3\nexternal_runtime_key=keep\n",
+    )
+    .unwrap();
+    set(&mut state, "vsync", json!(false));
+    save(&mut state);
+    let ini = load_ini(&state.paths.ini_path());
+    assert_eq!(ini.values["frame_generation_frames"], "1");
+    assert_eq!(ini.values["frame_generation"], "fsr");
+    assert_eq!(ini.values["external_runtime_key"], "keep");
+}
+
 fn shows(state: &State, label: &str) -> bool {
     simulator(app::view(state)).find(label).is_ok()
 }
@@ -423,7 +471,7 @@ fn saving_patches_keeps_the_choice_of_other_game_versions() {
     assert!(!dirty(&state));
 }
 
-const HIDDEN_UPSCALING_INI: &str = "upscaler=fsr4\npreset=3\nfsr1=1\nsharpen=1\nsharpness=0.73\n\
+const HIDDEN_UPSCALING_INI: &str = "upscaler=fsr3\npreset=3\nfsr1=1\nsharpen=1\nsharpness=0.73\n\
      rcas=1\nrcas_strength=42\nobject_motion=0\noutput_res=2560x1440\n";
 
 #[test]
@@ -432,9 +480,10 @@ fn hidden_settings_are_preserved_without_migration() {
     fs::write(dir.path().join("spartanport.ini"), HIDDEN_UPSCALING_INI).unwrap();
     let mut state = state_in(dir.path());
     let before = load_ini(&state.paths.ini_path()).values;
+    for key in ["upscaler", "preset"] {
+        assert!(SHOWN_INI_KEYS.contains(&key), "{key}");
+    }
     for key in [
-        "upscaler",
-        "preset",
         "fsr1",
         "sharpen",
         "sharpness",
@@ -461,7 +510,7 @@ fn hidden_settings_are_preserved_without_migration() {
     set(&mut state, "ui_language", json!("ru"));
     save(&mut state);
     assert_eq!(state.lang, "ru");
-    assert_eq!(load_ini(&state.paths.ini_path()).values["upscaler"], "fsr4");
+    assert_eq!(load_ini(&state.paths.ini_path()).values["upscaler"], "fsr3");
 }
 
 #[test]
@@ -926,22 +975,18 @@ fn audio_and_effects_options_are_saved_and_read_back() {
 }
 
 #[test]
-fn anti_aliasing_choices_are_saved_and_read_back() {
+fn anti_aliasing_is_saved_in_the_ini_and_read_back() {
     let dir = tempfile::tempdir().unwrap();
     let mut state = state_in(dir.path());
     open(&mut state, Page::Graphics);
-    set(&mut state, "anti_aliasing", json!("fxaa"));
-    set(&mut state, "temporal_aa", json!("taa"));
+    set(&mut state, "anti_aliasing", json!("smaa"));
     assert!(save_enabled(&state));
     click_save(&mut state);
-    // FXAA / SMAA is read by the game from the ini; the temporal choice is the launcher's own.
     let ini = fs::read_to_string(state.paths.ini_path()).unwrap();
-    assert!(ini.lines().any(|l| l == "anti_aliasing=fxaa"), "{ini}");
-    assert!(!ini.contains("temporal_aa"), "{ini}");
+    assert!(ini.lines().any(|l| l == "anti_aliasing=smaa"), "{ini}");
     let settings = fs::read_to_string(state.paths.config_file()).unwrap();
-    assert!(settings.contains("\"temporal_aa\": \"taa\""), "{settings}");
+    assert!(!settings.contains("anti_aliasing"), "{settings}");
     let reopened = state_in(dir.path());
-    assert_eq!(reopened.store.text("anti_aliasing"), "fxaa");
-    assert_eq!(reopened.store.text("temporal_aa"), "taa");
+    assert_eq!(reopened.store.text("anti_aliasing"), "smaa");
     assert!(!dirty(&reopened));
 }

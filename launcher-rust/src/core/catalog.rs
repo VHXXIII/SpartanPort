@@ -3,9 +3,9 @@
 
 use crate::core::options::{
     Choice, AIM_STYLES, ANISOTROPY, ANTI_ALIASING, AUDIO_CHANNELS, DISPLAY_MODES, DRAW_PIPE,
-    ENGINE_FPS_CHOICES, FPS_LIMITS, FRAMES_QUEUED, GLYPH_STYLES, LANGUAGES, LIVE_RESOLUTION,
-    MENU_CONFIRM_STYLES, NO_MSAA, OUTPUTS, PRESETS, READBACKS, STICK_PROMPTS, STREAM_MEMORY,
-    TEMPORAL_AA, UI_LANGUAGES, UI_SCALES, UPSCALERS, VIDEO_BACKENDS,
+    ENGINE_FPS_CHOICES, FPS_LIMITS, FRAMES_QUEUED, FRAME_GENERATION, GLYPH_STYLES, LANGUAGES,
+    LIVE_RESOLUTION, MENU_CONFIRM_STYLES, NO_MSAA, OUTPUTS, PRESETS, READBACKS, STICK_PROMPTS,
+    STREAM_MEMORY, UI_LANGUAGES, UI_SCALES, UPSCALERS, VIDEO_BACKENDS,
 };
 
 /// The file a setting lives in.
@@ -157,12 +157,6 @@ pub static SETTINGS: &[Setting] = &[
         Kind::Text,
         Text(""),
         env("SPARTAN_PATCH_DIR", ""),
-    ),
-    app(
-        "experimental_upscaler",
-        Flag,
-        Bool(false),
-        env("SPARTAN_EXPERIMENTAL_UPSCALER", ""),
     ),
     app("video_backend", Pick(VIDEO_BACKENDS), Text("auto"), None),
     app("gamemode", Flag, Bool(false), env("SPARTAN_GAMEMODE", "")),
@@ -322,9 +316,6 @@ pub static SETTINGS: &[Setting] = &[
         Text("off"),
         env("SPARTAN_GLYPH_STYLE", "off"),
     ),
-    // Temporal AA (off / TAA / FSR 3.1 Native AA): `env.rs` derives the upscaler variables from it.
-    // Not in a new settings.json: the choice is saved once the player makes it.
-    app_unwritten("temporal_aa", Pick(TEMPORAL_AA), Text("off")),
     app_unwritten("launcher_effects", Flag, Bool(true)),
     app_unwritten("controls_device", Kind::Text, Text("")),
     ini(
@@ -379,10 +370,18 @@ pub static SETTINGS: &[Setting] = &[
     ),
     ini("motion_blur", Flag, Bool(true), true, 29),
     ini("depth_of_field", Flag, Bool(true), true, 30),
-    // Spatial AA, read by the game from spartanport.ini (`SpartanGraphics::ParseAntiAliasing`).
-    ini("anti_aliasing", Pick(ANTI_ALIASING), Text("off"), true, 31),
-    ini("upscaler", Pick(UPSCALERS), Text("fsr3"), false, 0),
-    ini("preset", Pick(PRESETS), Text("1"), false, 1),
+    ini("upscaler", Pick(UPSCALERS), Text("off"), true, 0),
+    ini("preset", Pick(PRESETS), Text("1"), true, 1),
+    ini(
+        "frame_generation",
+        Pick(FRAME_GENERATION),
+        Text("off"),
+        true,
+        31,
+    ),
+    ini("frame_generation_frames", Kind::Int, Text("1"), false, 32),
+    // FXAA / SMAA of the finished frame, read by the game from spartanport.ini.
+    ini("anti_aliasing", Pick(ANTI_ALIASING), Text("off"), true, 33),
     ini("object_motion", Flag, Bool(true), false, 2),
     ini("output_res", Pick(OUTPUTS), Text("1920x1080"), false, 4),
     ini(
@@ -531,18 +530,20 @@ mod tests {
     }
 
     #[test]
-    fn shown_ini_keys_are_the_27_controls_of_the_window() {
-        assert_eq!(SHOWN_INI_KEYS.len(), 27);
+    fn shown_ini_keys_are_the_30_controls_of_the_window() {
+        assert_eq!(SHOWN_INI_KEYS.len(), 30);
         for seeded in ["monitor", "hdr", "glyph_style"] {
             assert!(SHOWN_INI_KEYS.contains(&seeded), "{seeded}");
         }
         assert!(INI_FLAGS.contains(&"hdr"));
+        for shown in ["upscaler", "preset", "frame_generation"] {
+            assert!(SHOWN_INI_KEYS.contains(&shown), "{shown}");
+        }
         for parked in [
-            "upscaler",
-            "preset",
             "object_motion",
             "output_res",
             "live_resolution",
+            "frame_generation_frames",
         ] {
             assert!(!SHOWN_INI_KEYS.contains(&parked), "{parked}");
         }

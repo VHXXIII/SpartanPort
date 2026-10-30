@@ -395,35 +395,11 @@ class ControlMapTest(unittest.TestCase):
         self.assertEqual(launcher.game_environment({**settings, 'parallel_warmup': False})['SPARTAN_PARALLEL_WARMUP'], '0')
         self.assertEqual(launcher.game_environment({**settings, 'background_warmup': False})['SPARTAN_BACKGROUND_WARMUP'], '0')
 
-    def test_temporal_upscaler_stays_off_with_a_saved_2_1_8_switch(self):
-        # 2.1.8 showed the experimental switch; a player who turned it on must not keep it on now that it is hidden.
-        for saved in (True, False, None):
+    def test_upscaler_switch_reaches_the_game(self):
+        # The Graphics page shows the switch again: its saved value decides, off when absent.
+        for saved, expected in ((True, '1'), (False, '0'), (None, '0')):
             env = launcher.game_environment({**launcher.APP_DEFAULTS, 'experimental_upscaler': saved})
-            self.assertEqual(env['SPARTAN_EXPERIMENTAL_UPSCALER'], '0')
-
-    def test_temporal_aa_choice_selects_one_native_mode(self):
-        os = __import__('os')
-        # Off by default: the temporal upscalers stay parked and nothing selects one.
-        self.assertEqual(launcher.APP_DEFAULTS['temporal_aa'], 'off')
-        env = launcher.game_environment({**launcher.APP_DEFAULTS})
-        self.assertEqual(env['SPARTAN_EXPERIMENTAL_UPSCALER'], '0')
-        self.assertNotIn('SPARTAN_UPSCALER', {k for k in env if k not in os.environ})
-        # TAA and FSR 3.1: the experimental gate opens and the environment picks that mode at
-        # native resolution (preset 0 = Native AA, no downscaling), never FSR 4 or DLSS.
-        for mode in ('taa', 'fsr3'):
-            with mock.patch.dict(os.environ, {'SPARTAN_RENDER_RES': '1280x720'}):
-                env = launcher.game_environment({**launcher.APP_DEFAULTS, 'temporal_aa': mode})
-            self.assertEqual(env['SPARTAN_EXPERIMENTAL_UPSCALER'], '1', mode)
-            self.assertEqual(env['SPARTAN_UPSCALER'], mode)
-            self.assertEqual(env['SPARTAN_UPSCALE_PRESET'], '0', mode)
-            self.assertNotIn('SPARTAN_RENDER_RES', env)
-        # Anything else (a stray value in settings.json, FSR 4, DLSS) leaves the gate shut.
-        for saved in ('fsr4', 'dlss', 'true', 1, True, None):
-            env = launcher.game_environment({**launcher.APP_DEFAULTS, 'temporal_aa': saved})
-            self.assertEqual(env['SPARTAN_EXPERIMENTAL_UPSCALER'], '0', saved)
-        # The 2.1.8 switch alone still does nothing.
-        env = launcher.game_environment({**launcher.APP_DEFAULTS, 'experimental_upscaler': True})
-        self.assertEqual(env['SPARTAN_EXPERIMENTAL_UPSCALER'], '0')
+            self.assertEqual(env['SPARTAN_EXPERIMENTAL_UPSCALER'], expected)
 
     def test_glyph_style_is_off_by_default(self):
         self.assertEqual(launcher.APP_DEFAULTS['glyph_style'], 'off')
@@ -1068,4 +1044,3 @@ class MenuConfirmSwapTest(unittest.TestCase):
         xbox_names = launcher.PAD_STYLES['xbox']
         self.assertEqual(xbox_names['a'], 'A')
         self.assertEqual(xbox_names['b'], 'B')
-

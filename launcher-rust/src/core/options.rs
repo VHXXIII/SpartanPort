@@ -122,32 +122,36 @@ pub static GLYPH_STYLES: &[Choice] = &[
 ];
 
 pub static UPSCALERS: &[Choice] = &[
+    cr("off", "Off", "Выключен"),
     cr("fsr3", "FSR 3.1 (every GPU)", "FSR 3.1 (любая видеокарта)"),
+    c("fsr4", "FSR 4 (AMD Radeon, Intel Arc)"),
+    #[cfg(windows)]
+    c("fsr411", "FSR 4.1 (AMD driver)"),
     cr(
         "taa",
         "TAA (native resolution anti-aliasing)",
         "TAA (нативное сглаживание)",
     ),
-    cr("off", "Off", "Выключен"),
 ];
 
-/// Spatial anti-aliasing of the game's own image pass (`anti_aliasing` in spartanport.ini).
+/// Spatial anti-aliasing of the finished frame (`anti_aliasing` in spartanport.ini): FXAA or SMAA.
+/// The temporal TAA is the Upscaler choice "TAA", not a value of this key.
 pub static ANTI_ALIASING: &[Choice] = &[c("off", "Off"), c("fxaa", "FXAA"), c("smaa", "SMAA")];
 
-/// Temporal anti-aliasing at native resolution (`temporal_aa`): the port's own TAA, or AMD's FSR 3.1
-/// in its Native AA mode. The launcher turns it into the upscaler environment (`core/env.rs`).
-pub static TEMPORAL_AA: &[Choice] = &[
-    c("off", "Off"),
-    c("taa", "TAA"),
-    c("fsr3", "FSR 3.1 (Native AA)"),
+/// spartanport.ini frame_generation; the game reads the same values (frame_generation_policy.h).
+pub static FRAME_GENERATION: &[Choice] = &[
+    cr("off", "Off", "Выключен"),
+    c("fsr", "AMD FSR (every GPU)"),
 ];
 
+/// Ordered by render scale; the values are the ini's preset numbers (Ultra Quality was added as 5).
 pub static PRESETS: &[Choice] = &[
-    c("0", "Native AA (×1.0)"),
-    c("1", "Quality (×1.5)"),
-    c("2", "Balanced (×1.7)"),
-    c("3", "Performance (×2)"),
-    c("4", "Ultra Performance (×3)"),
+    c("0", "Native AA (100%)"),
+    c("5", "Ultra Quality (77%)"),
+    c("1", "Quality (67%)"),
+    c("2", "Balanced (59%)"),
+    c("3", "Performance (50%)"),
+    c("4", "Ultra Performance (33%)"),
 ];
 
 pub static OUTPUTS: &[Choice] = &[
@@ -504,6 +508,8 @@ mod tests {
     #[test]
     fn every_table_has_unique_values() {
         let tables: [&[Choice]; 24] = [
+            ANTI_ALIASING,
+            FRAME_GENERATION,
             DISPLAY_MODES,
             ANISOTROPY,
             FPS_LIMITS,
@@ -514,8 +520,6 @@ mod tests {
             AUDIO_CHANNELS,
             GLYPH_STYLES,
             UPSCALERS,
-            ANTI_ALIASING,
-            TEMPORAL_AA,
             PRESETS,
             OUTPUTS,
             LIVE_RESOLUTION,

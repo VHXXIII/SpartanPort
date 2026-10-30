@@ -87,22 +87,14 @@ fn lookup(lang: &str, en: &str) -> Option<String> {
 /// Rust-only UI strings absent from the Python tables, as (English, [(language, text)]). Other
 /// languages fall back to English: a translator gap to fill.
 static UI_EXTRA: &[(&str, &[(&str, &str)])] = &[
-    // Graphics > Effects: spatial and temporal anti-aliasing.
+    // Graphics > Effects: spatial anti-aliasing (FXAA / SMAA) and a pointer to the port's TAA.
     (
         "Anti-aliasing",
         &[("pt", "Suavização de bordas"), ("es", "Suavizado de bordes")],
     ),
     (
-        "Temporal anti-aliasing",
-        &[("pt", "Anti-aliasing temporal"), ("es", "Suavizado temporal")],
-    ),
-    (
-        "Smooths jagged edges. FXAA is cheap and a little soft; SMAA keeps the picture sharper and costs a bit more. Both also touch the HUD slightly.",
-        &[("pt", "Suaviza as bordas serrilhadas. O FXAA é barato e um pouco suave; o SMAA mantém a imagem mais nítida e custa um pouco mais. Ambos também afetam levemente a HUD.")],
-    ),
-    (
-        "Off (default). Smooths edges and shimmering using previous frames, at native resolution (no downscaling). TAA is the port's own and is tuned for this game: its default values are the optimized ones, and every setting can be adjusted to your taste in the in-game menu (Insert / R3+L2) > Image. FSR 3.1 uses AMD's algorithm in its Native AA mode, on any graphics card; its default values are optimized for this game too, and its look can be adjusted in the same menu. Use either with Anti-aliasing set to Off. Takes effect after restarting the game.",
-        &[("pt", "Desligado (padrão). Suaviza bordas e cintilação usando quadros anteriores, na resolução nativa (sem reduzir a resolução). O TAA é o próprio do port e foi ajustado para este jogo: seus valores padrão são os otimizados, e cada ajuste pode ser mudado a seu gosto no menu do jogo (Insert / R3+L2) > Image. O FSR 3.1 usa o algoritmo da AMD no modo Native AA, em qualquer placa de vídeo; seus valores padrão também são otimizados para este jogo, e o visual pode ser ajustado no mesmo menu. Use um deles com o Anti-aliasing em Desligado. Vale após reiniciar o jogo.")],
+        "Smooths jagged edges. FXAA is cheap and a little soft; SMAA keeps the picture sharper and costs a bit more. Both also touch the HUD slightly. For temporal anti-aliasing at native resolution choose TAA under Upscaler (Native AA preset): the port's own, tuned for this game. Its default values are the optimized ones, and every setting can be adjusted to your taste in the in-game menu (Insert / R3+L2) > Image. Use TAA with this set to Off.",
+        &[("pt", "Suaviza as bordas serrilhadas. O FXAA é barato e um pouco suave; o SMAA mantém a imagem mais nítida e custa um pouco mais. Ambos também afetam levemente a HUD. Para anti-aliasing temporal na resolução nativa, escolha TAA em Upscaler (preset Native AA): é o do próprio port, ajustado para este jogo. Seus valores padrão são os otimizados, e cada ajuste pode ser mudado a seu gosto no menu do jogo (Insert / R3+L2) > Image. Use o TAA com esta opção em Desligado.")],
     ),
     // The switch attacks of the Controls page, in the Python's Portuguese and Spanish.
     (

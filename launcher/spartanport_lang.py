@@ -947,6 +947,13 @@ EXTRA = {
         'Graphics (experimental)': 'Gráficos (experimental)',
         'Experimental': 'Experimental',
         'Enable the upscaler (experimental)': 'Ativar o upscaler (experimental)',
+        'Enable the upscaler': 'Ativar o upscaler',
+        'Share of the Render resolution (Performance page) the game renders at; the upscaler rebuilds the full Render resolution. Lower renders faster. Native AA keeps the full resolution.': 'Fração da resolução de renderização (página Desempenho) em que o jogo renderiza; o upscaler reconstrói essa resolução completa. Menor roda mais rápido. AA nativo mantém a resolução completa.',
+        'Off (default): the game runs without temporal upscaling. On: FSR 3.1 with the preset below. Animated characters can still show some ghosting.': 'Desligado (padrão): o jogo roda sem upscaling temporal. Ligado: FSR 3.1 com o preset abaixo. Personagens animados ainda podem mostrar algum rastro.',
+        'Share of the Render resolution above the game renders at; the upscaler rebuilds the full Render resolution. Lower renders faster. Native AA keeps the full resolution.': 'Fração da resolução de renderização acima em que o jogo renderiza; o upscaler reconstrói essa resolução completa. Menor roda mais rápido. AA nativo mantém a resolução completa.',
+        'Native AA (100%)': 'AA nativo (100%)', 'Ultra Quality (77%)': 'Qualidade ultra (77%)',
+        'Quality (67%)': 'Qualidade (67%)', 'Balanced (59%)': 'Equilibrado (59%)',
+        'Performance (50%)': 'Desempenho (50%)', 'Ultra Performance (33%)': 'Desempenho máximo (33%)',
         'Off (default): the game runs without temporal upscaling. These upscalers are not calibrated for this game yet: expect ghosting or flicker. FSR 3.1 needs nothing else; FSR 4 needs the assets below, and without them the game uses FSR 3.1. The options on this page only take effect with this switch on.': 'Desligado (padrão): o jogo roda sem upscaling temporal. Esses upscalers ainda não estão calibrados para este jogo: espere fantasmas (ghosting) ou cintilação. O FSR 3.1 não precisa de mais nada; o FSR 4 precisa dos assets abaixo e, sem eles, o jogo usa o FSR 3.1. As opções desta página só valem com este interruptor ligado.',
         'Add to Steam': 'Adicionar à Steam',
         'Steam is open. Close it completely (Steam > Exit) and click again: Steam rewrites its shortcuts when it closes.': 'A Steam está aberta. Feche-a por completo (Steam > Sair) e clique de novo: a Steam reescreve os atalhos quando fecha.',
@@ -1255,6 +1262,13 @@ EXTRA = {
         'Graphics (experimental)': 'Gráficos (experimental)',
         'Experimental': 'Experimental',
         'Enable the upscaler (experimental)': 'Activar el escalador (experimental)',
+        'Enable the upscaler': 'Activar el escalador',
+        'Share of the Render resolution (Performance page) the game renders at; the upscaler rebuilds the full Render resolution. Lower renders faster. Native AA keeps the full resolution.': 'Fracción de la resolución de renderizado (página Rendimiento) a la que el juego renderiza; el escalador reconstruye esa resolución completa. Menor es más rápido. AA nativo mantiene la resolución completa.',
+        'Off (default): the game runs without temporal upscaling. On: FSR 3.1 with the preset below. Animated characters can still show some ghosting.': 'Desactivado (predet.): el juego funciona sin escalado temporal. Activado: FSR 3.1 con el preset de abajo. Los personajes animados aún pueden mostrar algo de estela.',
+        'Share of the Render resolution above the game renders at; the upscaler rebuilds the full Render resolution. Lower renders faster. Native AA keeps the full resolution.': 'Fracción de la resolución de renderizado de arriba a la que el juego renderiza; el escalador reconstruye esa resolución completa. Menor es más rápido. AA nativo mantiene la resolución completa.',
+        'Native AA (100%)': 'AA nativo (100%)', 'Ultra Quality (77%)': 'Calidad ultra (77%)',
+        'Quality (67%)': 'Calidad (67%)', 'Balanced (59%)': 'Equilibrado (59%)',
+        'Performance (50%)': 'Rendimiento (50%)', 'Ultra Performance (33%)': 'Rendimiento máximo (33%)',
         'Off (default): the game runs without temporal upscaling. These upscalers are not calibrated for this game yet: expect ghosting or flicker. FSR 3.1 needs nothing else; FSR 4 needs the assets below, and without them the game uses FSR 3.1. The options on this page only take effect with this switch on.':
             'Desactivado (predeterminado): el juego corre sin escalado temporal. Estos escaladores aún no están calibrados para este juego: es posible que haya estelas (ghosting) o parpadeos. FSR 3.1 no necesita nada más; FSR 4 necesita los archivos de abajo y, sin ellos, el juego usa FSR 3.1. Las opciones de esta página solo surten efecto con este interruptor activado.',
         'Add to Steam': 'Añadir a Steam',
@@ -1564,12 +1578,6 @@ EXTRA['es'].update({
 })
 
 EXTRA['pt'].update({
-    'Temporal anti-aliasing': 'Anti-aliasing temporal (TAA)',
-    "Off (default). Smooths edges and shimmering using previous frames, at native resolution (no downscaling). TAA is the port's own and is tuned for this game: its default values are the optimized ones, and every setting can be adjusted to your taste in the in-game menu (Insert / R3+L2) > Image. FSR 3.1 uses AMD's algorithm in its Native AA mode, on any graphics card; its default values are optimized for this game too, and its look can be adjusted in the same menu. Use either with Anti-aliasing set to Off. Takes effect after restarting the game.":
-        'Desativado (padrão). Suaviza bordas e cintilações usando quadros anteriores, em resolução nativa (sem redução). O TAA é do próprio port e foi ajustado para este jogo: os valores padrão são os otimizados, e cada ajuste pode ser alterado a seu gosto no menu do jogo (Insert / R3+L2) > Image. O FSR 3.1 usa o algoritmo da AMD no modo Native AA, em qualquer placa de vídeo; seus valores padrão também são otimizados para este jogo, e o visual pode ser ajustado no mesmo menu. Use qualquer um com o Anti-aliasing em Desativado. Aplica-se ao reiniciar o jogo.',
-    'Anti-aliasing': 'Suavização de serrilhado',
-    'Smooths jagged edges. FXAA is cheap and a little soft; SMAA keeps the picture sharper and costs a bit more. Both also touch the HUD slightly.':
-        'Suaviza as bordas serrilhadas. O FXAA é leve e um pouco suave; o SMAA mantém a imagem mais nítida e custa um pouco mais. Ambos também afetam levemente o HUD.',
     'Effects': 'Efeitos',
     'Motion blur': 'Desfoque de movimento',
     "The game's own motion blur on fast moving objects and the camera. Off removes it.":
@@ -1579,12 +1587,6 @@ EXTRA['pt'].update({
         'O desfoque do próprio jogo em objetos distantes, mais forte nas cenas. Desligado, a imagem inteira fica nítida.',
 })
 EXTRA['es'].update({
-    'Temporal anti-aliasing': 'Anti-aliasing temporal (TAA)',
-    "Off (default). Smooths edges and shimmering using previous frames, at native resolution (no downscaling). TAA is the port's own and is tuned for this game: its default values are the optimized ones, and every setting can be adjusted to your taste in the in-game menu (Insert / R3+L2) > Image. FSR 3.1 uses AMD's algorithm in its Native AA mode, on any graphics card; its default values are optimized for this game too, and its look can be adjusted in the same menu. Use either with Anti-aliasing set to Off. Takes effect after restarting the game.":
-        'Desactivado (por defecto). Suaviza bordes y parpadeos usando fotogramas anteriores, a resolución nativa (sin reducción). TAA es el propio del port y está ajustado para este juego: sus valores por defecto son los optimizados, y cada ajuste se puede cambiar a tu gusto en el menú del juego (Insert / R3+L2) > Image. FSR 3.1 usa el algoritmo de AMD en su modo Native AA, en cualquier tarjeta gráfica; sus valores por defecto también están optimizados para este juego, y su aspecto se puede ajustar en el mismo menú. Usa cualquiera de los dos con Anti-aliasing en Desactivado. Se aplica al reiniciar el juego.',
-    'Anti-aliasing': 'Suavizado de bordes',
-    'Smooths jagged edges. FXAA is cheap and a little soft; SMAA keeps the picture sharper and costs a bit more. Both also touch the HUD slightly.':
-        'Suaviza los bordes dentados. FXAA es ligero y algo suave; SMAA mantiene la imagen más nítida y cuesta un poco más. Ambos afectan también ligeramente al HUD.',
     'Effects': 'Efectos',
     'Motion blur': 'Desenfoque de movimiento',
     "The game's own motion blur on fast moving objects and the camera. Off removes it.":
@@ -1700,6 +1702,16 @@ EXTRA.setdefault('zh', {}).update({'   (game patches)': '   （游戏补丁）',
  'Dodge': '闪避',
  'Drop a mod folder or .zip in the mods folder.': '将模组文件夹或 .zip 放入模组目录。',
  'Enable the upscaler (experimental)': '启用超分辨率（实验性）',
+ 'Enable the upscaler': '启用超分辨率',
+ 'Share of the Render resolution (Performance page) the game renders at; the upscaler rebuilds the full Render resolution. Lower renders faster. Native AA keeps the full resolution.': '游戏以渲染分辨率（性能页面）的这一比例渲染，超分辨率重建完整渲染分辨率。越低越快。原生抗锯齿保持完整分辨率。',
+ 'Off (default): the game runs without temporal upscaling. On: FSR 3.1 with the preset below. Animated characters can still show some ghosting.': '默认关闭，游戏不使用时域超分辨率。开启：使用下方预设的 FSR 3.1。动画角色仍可能有少量拖影。',
+ 'Share of the Render resolution above the game renders at; the upscaler rebuilds the full Render resolution. Lower renders faster. Native AA keeps the full resolution.': '游戏以上方渲染分辨率的这一比例渲染，超分辨率重建完整渲染分辨率。越低越快。原生抗锯齿保持完整分辨率。',
+ 'Native AA (100%)': '原生抗锯齿 (100%)',
+ 'Ultra Quality (77%)': '超高质量 (77%)',
+ 'Quality (67%)': '质量 (67%)',
+ 'Balanced (59%)': '平衡 (59%)',
+ 'Performance (50%)': '性能 (50%)',
+ 'Ultra Performance (33%)': '超高性能 (33%)',
  'Engine frame rate': '引擎帧率',
  'Enlarges a smaller game image to the window. With Render resolution 720p (Performance) it raises the FPS; at the size of the window it does nothing.': '将较低分辨率的游戏画面放大到窗口大小。渲染分辨率设为 '
                                                                                                                                                          '720p '
@@ -2431,6 +2443,16 @@ EXTRA.setdefault('id', {}).update({
     'Delete': 'Hapus',
     'Diagnostics (for development)': 'Diagnostik (untuk pengembangan)',
     'Enable the upscaler (experimental)': 'Aktifkan upscaler (eksperimental)',
+    'Enable the upscaler': 'Aktifkan upscaler',
+    'Share of the Render resolution (Performance page) the game renders at; the upscaler rebuilds the full Render resolution. Lower renders faster. Native AA keeps the full resolution.': 'Bagian dari resolusi render (halaman Performa) yang dipakai game untuk merender; upscaler membangun ulang resolusi render penuh. Lebih rendah lebih cepat. Native AA memakai resolusi penuh.',
+    'Off (default): the game runs without temporal upscaling. On: FSR 3.1 with the preset below. Animated characters can still show some ghosting.': 'Mati (bawaan): game berjalan tanpa upscaling temporal. Nyala: FSR 3.1 dengan preset di bawah. Karakter yang bergerak masih bisa sedikit berbayang.',
+    'Share of the Render resolution above the game renders at; the upscaler rebuilds the full Render resolution. Lower renders faster. Native AA keeps the full resolution.': 'Bagian dari resolusi render di atas yang dipakai game untuk merender; upscaler membangun ulang resolusi render penuh. Lebih rendah lebih cepat. Native AA memakai resolusi penuh.',
+    'Native AA (100%)': 'Native AA (100%)',
+    'Ultra Quality (77%)': 'Kualitas Ultra (77%)',
+    'Quality (67%)': 'Kualitas (67%)',
+    'Balanced (59%)': 'Seimbang (59%)',
+    'Performance (50%)': 'Performa (50%)',
+    'Ultra Performance (33%)': 'Performa Ultra (33%)',
     'Experimental': 'Eksperimental',
     'F11 captures a frame for analysis': 'F11 menangkap satu frame untuk analisis',
     'Files': 'File',
@@ -2625,6 +2647,27 @@ EXTRA.setdefault('es', {}).update({
     'Stop the game before setting up a controller.': 'Cierra el juego antes de configurar un mando.',
 })
 
+EXTRA.setdefault('pt', {}).update({
+    'FSR 4.1 (AMD driver)': 'FSR 4.1 (driver AMD)',
+    'FSR 4.1 requires AMD Adrenalin 26.10.1 or newer. The log shows the active provider; fallback to FSR 3.1 is not FSR 4.1.': 'FSR 4.1 exige AMD Adrenalin 26.10.1 ou mais recente. O registro mostra o provedor ativo; usar FSR 3.1 como alternativa não significa FSR 4.1 ativo.',
+    'Off (default): no temporal upscaling. On: the selected upscaler and preset. Animated characters can still show some ghosting.': 'Desligado (padrão): sem upscaling temporal. Ligado: usa o upscaler e a predefinição selecionados. Personagens animados ainda podem mostrar algum rastro.',
+})
+EXTRA.setdefault('es', {}).update({
+    'FSR 4.1 (AMD driver)': 'FSR 4.1 (controlador AMD)',
+    'FSR 4.1 requires AMD Adrenalin 26.10.1 or newer. The log shows the active provider; fallback to FSR 3.1 is not FSR 4.1.': 'FSR 4.1 requiere AMD Adrenalin 26.10.1 o posterior. El registro muestra el proveedor activo; usar FSR 3.1 como alternativa no significa que FSR 4.1 esté activo.',
+    'Off (default): no temporal upscaling. On: the selected upscaler and preset. Animated characters can still show some ghosting.': 'Desactivado (predeterminado): sin escalado temporal. Activado: usa el escalador y el ajuste seleccionados. Los personajes animados aún pueden mostrar estelas.',
+})
+EXTRA.setdefault('zh', {}).update({
+    'FSR 4.1 (AMD driver)': 'FSR 4.1（AMD 驱动）',
+    'FSR 4.1 requires AMD Adrenalin 26.10.1 or newer. The log shows the active provider; fallback to FSR 3.1 is not FSR 4.1.': 'FSR 4.1 需要 AMD Adrenalin 26.10.1 或更新版本。日志会显示实际使用的提供程序；回退至 FSR 3.1 并不表示 FSR 4.1 已启用。',
+    'Off (default): no temporal upscaling. On: the selected upscaler and preset. Animated characters can still show some ghosting.': '默认关闭：不使用时域超分辨率。开启：使用所选超分辨率和预设。动画角色仍可能出现拖影。',
+})
+EXTRA.setdefault('id', {}).update({
+    'FSR 4.1 (AMD driver)': 'FSR 4.1 (driver AMD)',
+    'FSR 4.1 requires AMD Adrenalin 26.10.1 or newer. The log shows the active provider; fallback to FSR 3.1 is not FSR 4.1.': 'FSR 4.1 memerlukan AMD Adrenalin 26.10.1 atau lebih baru. Log menampilkan penyedia aktif; fallback ke FSR 3.1 bukan berarti FSR 4.1 aktif.',
+    'Off (default): no temporal upscaling. On: the selected upscaler and preset. Animated characters can still show some ghosting.': 'Mati (bawaan): tanpa upscaling temporal. Nyala: memakai upscaler dan preset pilihan. Karakter yang bergerak masih dapat berbayang.',
+})
+
 EXTRA['zh'].update({
     'Audio': '音频',
     'Volume': '音量',
@@ -2652,12 +2695,6 @@ EXTRA['id'].update({
 })
 
 EXTRA['zh'].update({
-    'Temporal anti-aliasing': '时间性抗锯齿 (TAA)',
-    "Off (default). Smooths edges and shimmering using previous frames, at native resolution (no downscaling). TAA is the port's own and is tuned for this game: its default values are the optimized ones, and every setting can be adjusted to your taste in the in-game menu (Insert / R3+L2) > Image. FSR 3.1 uses AMD's algorithm in its Native AA mode, on any graphics card; its default values are optimized for this game too, and its look can be adjusted in the same menu. Use either with Anti-aliasing set to Off. Takes effect after restarting the game.":
-        '关闭（默认）。使用前几帧平滑边缘和闪烁，采用原生分辨率（不降低分辨率）。TAA 是本移植版自带的，已针对本游戏调校：默认值即为优化值，每项设置都可在游戏内菜单（Insert / R3+L2）> Image 中按个人喜好调整。FSR 3.1 在其 Native AA 模式下使用 AMD 的算法，适用于任何显卡；其默认值同样已针对本游戏优化，外观也可在同一菜单中调整。使用其中任一项时，请将抗锯齿设为“关闭”。重启游戏后生效。',
-    'Anti-aliasing': '抗锯齿',
-    'Smooths jagged edges. FXAA is cheap and a little soft; SMAA keeps the picture sharper and costs a bit more. Both also touch the HUD slightly.':
-        '平滑锯齿边缘。FXAA 开销小但画面略软；SMAA 画面更锐利，开销稍大。两者也会轻微影响 HUD。',
     'Effects': '画面效果',
     'Motion blur': '动态模糊',
     "The game's own motion blur on fast moving objects and the camera. Off removes it.":
@@ -2668,12 +2705,6 @@ EXTRA['zh'].update({
 })
 
 EXTRA['id'].update({
-    'Temporal anti-aliasing': 'Anti-aliasing temporal (TAA)',
-    "Off (default). Smooths edges and shimmering using previous frames, at native resolution (no downscaling). TAA is the port's own and is tuned for this game: its default values are the optimized ones, and every setting can be adjusted to your taste in the in-game menu (Insert / R3+L2) > Image. FSR 3.1 uses AMD's algorithm in its Native AA mode, on any graphics card; its default values are optimized for this game too, and its look can be adjusted in the same menu. Use either with Anti-aliasing set to Off. Takes effect after restarting the game.":
-        'Mati (bawaan). Menghaluskan tepi dan kedipan memakai frame sebelumnya, pada resolusi asli (tanpa penurunan). TAA adalah milik port ini dan sudah disetel untuk game ini: nilai bawaannya adalah nilai yang dioptimalkan, dan setiap pengaturan bisa diubah sesuai selera di menu dalam game (Insert / R3+L2) > Image. FSR 3.1 memakai algoritma AMD dalam mode Native AA, di kartu grafis apa pun; nilai bawaannya juga dioptimalkan untuk game ini, dan tampilannya bisa diubah di menu yang sama. Gunakan salah satunya dengan Anti-aliasing Mati. Berlaku setelah game dimulai ulang.',
-    'Anti-aliasing': 'Anti-aliasing',
-    'Smooths jagged edges. FXAA is cheap and a little soft; SMAA keeps the picture sharper and costs a bit more. Both also touch the HUD slightly.':
-        'Menghaluskan tepi bergerigi. FXAA ringan dan sedikit lembut; SMAA menjaga gambar lebih tajam dan sedikit lebih berat. Keduanya juga sedikit memengaruhi HUD.',
     'Effects': 'Efek',
     'Motion blur': 'Motion blur',
     "The game's own motion blur on fast moving objects and the camera. Off removes it.":

@@ -17,8 +17,9 @@ const DERIVED: &[(&str, &str)] = &[
     ("SPARTAN_PAD_MAP", "controls"),
 ];
 
-/// Switches the launcher parks: whatever the setting says, the game gets this value.
-const PARKED: &[(&str, &str)] = &[("experimental_upscaler", "0")];
+/// Switches the launcher parks: whatever the setting says, the game gets this value. None now: the
+/// upscaler switch is shown again and reaches the game like any other flag.
+const PARKED: &[(&str, &str)] = &[];
 
 fn world() -> (Paths, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
@@ -166,24 +167,4 @@ fn environment_writes_no_file() {
     let full = game_environment(&settings, &paths, "en", &IndexMap::new(), true);
     assert!(trophies.exists());
     assert_eq!(pure, full);
-}
-
-#[test]
-fn temporal_anti_aliasing_selects_the_native_aa_upscaler() {
-    let (paths, _dir) = world();
-    // Off: temporal upscaling stays parked and the runner turns the upscaler off.
-    let off = env_of(&settings_with("temporal_aa", json!("off")), &paths);
-    assert_eq!(off["SPARTAN_EXPERIMENTAL_UPSCALER"], "0");
-    assert!(!off.contains_key("SPARTAN_UPSCALER"));
-    assert!(!off.contains_key("SPARTAN_UPSCALE_PRESET"));
-    // TAA and FSR 3.1: always at native resolution (preset 0, Native AA).
-    for mode in ["taa", "fsr3"] {
-        let env = env_of(&settings_with("temporal_aa", json!(mode)), &paths);
-        assert_eq!(env["SPARTAN_EXPERIMENTAL_UPSCALER"], "1", "{mode}");
-        assert_eq!(env["SPARTAN_UPSCALER"], mode);
-        assert_eq!(env["SPARTAN_UPSCALE_PRESET"], "0", "{mode}");
-    }
-    // A value the table does not know is ignored.
-    let odd = env_of(&settings_with("temporal_aa", json!("dlss")), &paths);
-    assert_eq!(odd["SPARTAN_EXPERIMENTAL_UPSCALER"], "0");
 }

@@ -34,6 +34,18 @@ fn graphics_rows_change_the_right_keys() {
     let _ = app::update(&mut state, pick);
     assert_eq!(state.store.text("display_mode"), "borderless");
     assert!(state.store.json("display_mode").is_none());
+    #[cfg(windows)]
+    {
+        let pick = select_message(
+            "upscaler",
+            spartanport_launcher::core::options::UPSCALERS,
+            "en",
+            "FSR 4.1 (AMD driver)",
+        )
+        .unwrap();
+        let _ = app::update(&mut state, pick);
+        assert_eq!(state.store.text("upscaler"), "fsr411");
+    }
 }
 
 #[test]
@@ -2906,25 +2918,17 @@ fn game_audio_offers_volume_and_speakers() {
 }
 
 #[test]
-fn graphics_page_offers_spatial_and_temporal_anti_aliasing() {
-    use spartanport_launcher::core::options::{ANTI_ALIASING, TEMPORAL_AA};
+fn graphics_page_offers_spatial_anti_aliasing() {
+    use spartanport_launcher::core::options::ANTI_ALIASING;
     let dir = tempfile::tempdir().unwrap();
     let mut state = state(dir.path());
     open(&mut state, Page::Graphics);
-    page_has(
-        &state,
-        &["Anti-aliasing", "Temporal anti-aliasing  ·  restart"],
-    );
-    // Both are off until chosen; the temporal choice is a settings.json key, FXAA / SMAA an ini key.
+    page_has(&state, &["Anti-aliasing"]);
+    // Off until chosen, as in the game; FXAA and SMAA are values of one ini key.
     assert_eq!(state.store.text("anti_aliasing"), "off");
-    assert_eq!(state.store.text("temporal_aa"), "off");
-    let pick = select_message("anti_aliasing", ANTI_ALIASING, "en", "SMAA").unwrap();
-    let _ = app::update(&mut state, pick);
-    assert_eq!(state.store.text("anti_aliasing"), "smaa");
-    let pick = select_message("temporal_aa", TEMPORAL_AA, "en", "FSR 3.1 (Native AA)").unwrap();
-    let _ = app::update(&mut state, pick);
-    assert_eq!(state.store.text("temporal_aa"), "fsr3");
-    let pick = select_message("temporal_aa", TEMPORAL_AA, "en", "TAA").unwrap();
-    let _ = app::update(&mut state, pick);
-    assert_eq!(state.store.text("temporal_aa"), "taa");
+    for (label, value) in [("FXAA", "fxaa"), ("SMAA", "smaa"), ("Off", "off")] {
+        let pick = select_message("anti_aliasing", ANTI_ALIASING, "en", label).unwrap();
+        let _ = app::update(&mut state, pick);
+        assert_eq!(state.store.text("anti_aliasing"), value);
+    }
 }
