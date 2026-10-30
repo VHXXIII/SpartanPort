@@ -2212,7 +2212,7 @@ class Launcher:
                    '(no downscaling). TAA is the port\'s own and is tuned for this game: its default values are the '
                    'optimized ones, and every setting can be adjusted to your taste in the in-game menu '
                    '(Insert / R3+L2) > Image. FSR 3.1 uses AMD\'s algorithm in its Native AA mode, on any graphics '
-                   'card; it is still being tuned for this game (possible ghosting or flicker). Use either with '
+                   'card; its default values are optimized for this game too, and its look can be adjusted in the same menu. Use either with '
                    'Anti-aliasing set to Off. Takes effect after restarting the game.'), restart=True)
         self.section(f, _('Textures'))
         self.row(f, _('Anisotropic filtering'), self.choice(f, 'anisotropy', 'ini', ANISOTROPY),

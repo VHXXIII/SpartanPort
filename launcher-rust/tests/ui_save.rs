@@ -924,3 +924,24 @@ fn audio_and_effects_options_are_saved_and_read_back() {
     assert!(!reopened.store.flag("depth_of_field"));
     assert!(!dirty(&reopened));
 }
+
+#[test]
+fn anti_aliasing_choices_are_saved_and_read_back() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut state = state_in(dir.path());
+    open(&mut state, Page::Graphics);
+    set(&mut state, "anti_aliasing", json!("fxaa"));
+    set(&mut state, "temporal_aa", json!("taa"));
+    assert!(save_enabled(&state));
+    click_save(&mut state);
+    // FXAA / SMAA is read by the game from the ini; the temporal choice is the launcher's own.
+    let ini = fs::read_to_string(state.paths.ini_path()).unwrap();
+    assert!(ini.lines().any(|l| l == "anti_aliasing=fxaa"), "{ini}");
+    assert!(!ini.contains("temporal_aa"), "{ini}");
+    let settings = fs::read_to_string(state.paths.config_file()).unwrap();
+    assert!(settings.contains("\"temporal_aa\": \"taa\""), "{settings}");
+    let reopened = state_in(dir.path());
+    assert_eq!(reopened.store.text("anti_aliasing"), "fxaa");
+    assert_eq!(reopened.store.text("temporal_aa"), "taa");
+    assert!(!dirty(&reopened));
+}

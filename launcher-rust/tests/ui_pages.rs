@@ -2904,3 +2904,27 @@ fn game_audio_offers_volume_and_speakers() {
     state.lang = "pt".into();
     page_has(&state, &["ÁUDIO", "Alto-falantes  ·  reiniciar"]);
 }
+
+#[test]
+fn graphics_page_offers_spatial_and_temporal_anti_aliasing() {
+    use spartanport_launcher::core::options::{ANTI_ALIASING, TEMPORAL_AA};
+    let dir = tempfile::tempdir().unwrap();
+    let mut state = state(dir.path());
+    open(&mut state, Page::Graphics);
+    page_has(
+        &state,
+        &["Anti-aliasing", "Temporal anti-aliasing  ·  restart"],
+    );
+    // Both are off until chosen; the temporal choice is a settings.json key, FXAA / SMAA an ini key.
+    assert_eq!(state.store.text("anti_aliasing"), "off");
+    assert_eq!(state.store.text("temporal_aa"), "off");
+    let pick = select_message("anti_aliasing", ANTI_ALIASING, "en", "SMAA").unwrap();
+    let _ = app::update(&mut state, pick);
+    assert_eq!(state.store.text("anti_aliasing"), "smaa");
+    let pick = select_message("temporal_aa", TEMPORAL_AA, "en", "FSR 3.1 (Native AA)").unwrap();
+    let _ = app::update(&mut state, pick);
+    assert_eq!(state.store.text("temporal_aa"), "fsr3");
+    let pick = select_message("temporal_aa", TEMPORAL_AA, "en", "TAA").unwrap();
+    let _ = app::update(&mut state, pick);
+    assert_eq!(state.store.text("temporal_aa"), "taa");
+}

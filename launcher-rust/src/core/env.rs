@@ -170,8 +170,17 @@ pub fn environment(
     let mut env = base.clone();
     env.insert(var("game_dir").into(), settings.get_str("game_dir"));
     env.shift_remove(var("update_dir"));
-    // Temporal upscaling is parked: a switch saved on earlier has no control left to turn it off.
+    // Temporal upscaling stays parked: a switch saved on earlier has no control left to turn it off.
     env.insert(var("experimental_upscaler").into(), "0".into());
+    // The one exception is the temporal anti-aliasing the player chose (Graphics): always at native
+    // resolution (preset 0, Native AA: no downscaling). Only that mode is selected, by the
+    // environment, so spartanport.ini's `upscaler` key is never needed and FSR 4 / DLSS stay parked.
+    let temporal_aa = settings.text("temporal_aa");
+    if temporal_aa == "taa" || temporal_aa == "fsr3" {
+        env.insert(var("experimental_upscaler").into(), "1".into());
+        env.insert("SPARTAN_UPSCALER".into(), temporal_aa);
+        env.insert("SPARTAN_UPSCALE_PRESET".into(), "0".into());
+    }
     let update_dir = settings.get_str("update_dir");
     if !update_dir.is_empty() {
         env.insert(var("update_dir").into(), update_dir.clone());

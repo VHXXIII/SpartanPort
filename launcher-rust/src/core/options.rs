@@ -131,6 +131,17 @@ pub static UPSCALERS: &[Choice] = &[
     cr("off", "Off", "Выключен"),
 ];
 
+/// Spatial anti-aliasing of the game's own image pass (`anti_aliasing` in spartanport.ini).
+pub static ANTI_ALIASING: &[Choice] = &[c("off", "Off"), c("fxaa", "FXAA"), c("smaa", "SMAA")];
+
+/// Temporal anti-aliasing at native resolution (`temporal_aa`): the port's own TAA, or AMD's FSR 3.1
+/// in its Native AA mode. The launcher turns it into the upscaler environment (`core/env.rs`).
+pub static TEMPORAL_AA: &[Choice] = &[
+    c("off", "Off"),
+    c("taa", "TAA"),
+    c("fsr3", "FSR 3.1 (Native AA)"),
+];
+
 pub static PRESETS: &[Choice] = &[
     c("0", "Native AA (×1.0)"),
     c("1", "Quality (×1.5)"),
@@ -492,7 +503,7 @@ mod tests {
 
     #[test]
     fn every_table_has_unique_values() {
-        let tables: [&[Choice]; 22] = [
+        let tables: [&[Choice]; 24] = [
             DISPLAY_MODES,
             ANISOTROPY,
             FPS_LIMITS,
@@ -503,6 +514,8 @@ mod tests {
             AUDIO_CHANNELS,
             GLYPH_STYLES,
             UPSCALERS,
+            ANTI_ALIASING,
+            TEMPORAL_AA,
             PRESETS,
             OUTPUTS,
             LIVE_RESOLUTION,

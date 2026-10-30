@@ -2,16 +2,24 @@
 //!
 //! Ruling R35: like Python 2.6.0, the Experimental and Upscaling sections (`experimental_upscaler`,
 //! `upscaler`, `preset`, `output_res`, `live_resolution`, `object_motion`) stay parked until the
-//! image quality of temporal upscaling is validated, so this page does not show them.
+//! image quality of temporal upscaling is validated, so this page does not show them. The one
+//! exception is the Anti-aliasing pair of the Effects section: the game's FXAA / SMAA, and a
+//! temporal anti-aliasing (TAA or FSR 3.1 Native AA) that always runs at native resolution.
 
 use iced::widget::{button, column, text};
 use iced::Element;
 
 use crate::core::i18n::tr;
-use crate::core::options::{ANISOTROPY, DISPLAY_MODES};
+use crate::core::options::{ANISOTROPY, ANTI_ALIASING, DISPLAY_MODES, TEMPORAL_AA};
 use crate::ui::app::{Message, State};
 use crate::ui::theme;
 use crate::ui::widgets::{checkbox, row, section, select, select_pairs};
+
+/// The hint of the Anti-aliasing row.
+pub const AA_HINT: &str = "Smooths jagged edges. FXAA is cheap and a little soft; SMAA keeps the picture sharper and costs a bit more. Both also touch the HUD slightly.";
+
+/// The hint of the Temporal anti-aliasing row.
+pub const TEMPORAL_AA_HINT: &str = "Off (default). Smooths edges and shimmering using previous frames, at native resolution (no downscaling). TAA is the port's own and is tuned for this game: its default values are the optimized ones, and every setting can be adjusted to your taste in the in-game menu (Insert / R3+L2) > Image. FSR 3.1 uses AMD's algorithm in its Native AA mode, on any graphics card; its default values are optimized for this game too, and its look can be adjusted in the same menu. Use either with Anti-aliasing set to Off. Takes effect after restarting the game.";
 
 pub fn view(state: &State) -> Element<'_, Message> {
     let lang = state.lang.as_str();
@@ -40,6 +48,12 @@ pub fn view(state: &State) -> Element<'_, Message> {
     let anisotropy_label = format!(
         "{}  ·  {}",
         tr(lang, "Anisotropic filtering"),
+        tr(lang, "restart")
+    );
+
+    let temporal_label = format!(
+        "{}  ·  {}",
+        tr(lang, "Temporal anti-aliasing"),
         tr(lang, "restart")
     );
 
@@ -102,6 +116,18 @@ pub fn view(state: &State) -> Element<'_, Message> {
             Some(&hint(
                 "The game's own blur of distant objects, strongest in cutscenes. Off keeps the whole picture sharp."
             )),
+        ),
+        row(
+            state.rtl,
+            &tr(lang, "Anti-aliasing"),
+            select("anti_aliasing", ANTI_ALIASING, &ini("anti_aliasing"), lang),
+            Some(&hint(AA_HINT)),
+        ),
+        row(
+            state.rtl,
+            &temporal_label,
+            select("temporal_aa", TEMPORAL_AA, &ini("temporal_aa"), lang),
+            Some(&hint(TEMPORAL_AA_HINT)),
         ),
         section(state.rtl, &tr(lang, "Textures")),
         row(
