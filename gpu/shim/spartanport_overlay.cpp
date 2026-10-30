@@ -565,23 +565,6 @@ void ImageTab() {
             ImGui::EndTable();
         }
     }
-    if (s.upscaler == SpartanSettings::UpscalerFsr3) {
-        Separator("FSR 3.1 look (God of War III)");
-        if (BeginRows("##fsr_look")) {
-            SliderRow("Moving objects", s.fsr_mask, 0, 100, "%d%%",
-                      "How sensitively FSR drops its history on characters and objects that have no motion "
-                      "vectors. Higher: less trail and ghosting, but more shimmer on detailed textures; lower if the picture flickers. Default 60%.");
-            SliderRow("Moving object edges", s.fsr_edges, 0, 100, "%d%%",
-                      "Smooths the stair-stepped edges of moving characters, where FSR's history is refused: "
-                      "a spatial filter on those pixels only. Higher: smoother, slightly softer. Default 70%.");
-            SliderRow("Texture detail", s.fsr_lod, 0, 150, "%d%%",
-                      "Sharper textures (a negative mip bias, in percent of one level). Little effect with "
-                      "anisotropic filtering on, and characters shimmer more. Default 0%.");
-            CheckRow("Debug view (moving objects)", s.taa_debug,
-                     "Shows the moving-object mask (bright colour) over a darkened picture. For bug reports; not saved.");
-            ImGui::EndTable();
-        }
-    }
     Separator("Sharpening");
     if (BeginRows("##scaling")) {
         ImGui::BeginDisabled(rcas_blocked);

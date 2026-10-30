@@ -125,14 +125,8 @@ struct Values {
     /// Texture detail of the scene's materials: a negative mip bias of taa_lod / 100 levels, which the
     /// accumulation (jitter) turns into detail instead of shimmer (the usual TAA texture bias).
     std::atomic<int> taa_lod{75};
-    /// The same for FSR 3.1: 0 by default. The accumulation of FSR does not turn it into a cleaner picture
-    /// (test28: nothing on the environment, shimmer on Kratos), and with anisotropic filtering the
-    /// environment is already sampled at its finest detail.
-    std::atomic<int> fsr_lod{0};
     /// Edge smoothing of the pixels whose history was refused (moving characters): percent.
     std::atomic<int> taa_spatial{70};
-    std::atomic<int> fsr_edges{70}; ///< FSR 3.1: smoothing of the edges of moving objects, percent
-    std::atomic<int> fsr_mask{60}; ///< FSR 3.1: strength of the moving-object mask, percent (0 = off)
     /// TAA debug view (not saved): red = history rejected by depth, green = lost to colour change /
     /// moving-object detection, blue = history weight used.
     std::atomic<bool> taa_debug{false};

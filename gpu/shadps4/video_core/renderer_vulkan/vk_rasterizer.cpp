@@ -1776,10 +1776,6 @@ bool Rasterizer::BindResources(const Pipeline* pipeline) {
         const auto& r = Regs();
         static u32 same_depth = 0, writes = 0, small = 0, no_color = 0, applied = 0, calls = 0;
         static bool bias_reported = false;
-        // TAA accumulates the extra detail into a clean picture; FSR has its own setting (default 0).
-        const float texture_detail = float((SpartanSettings::Get().upscaler == SpartanSettings::UpscalerTaa
-                                               ? SpartanSettings::Get().taa_lod
-                                               : SpartanSettings::Get().fsr_lod).load());
         if (r.depth_buffer.DepthAddress() == scene_depth_address) {
             ++same_depth;
             if (r.depth_control.depth_write_enable) {
@@ -1790,7 +1786,7 @@ bool Rasterizer::BindResources(const Pipeline* pipeline) {
                 ++no_color;
             } else {
                 ++applied;
-                sampler_lod_bias = -texture_detail / 100.0f;
+                sampler_lod_bias = -float(SpartanSettings::Get().taa_lod.load()) / 100.0f;
             }
         }
         // once after a few frames (last_run.log), then rarely
@@ -1798,7 +1794,7 @@ bool Rasterizer::BindResources(const Pipeline* pipeline) {
             bias_reported = true;
             std::printf("TAA texture bias %.2f: %u of %u scene-depth draws (skipped: %u write, %u small, "
                         "%u no colour; %u other draws)\n",
-                        -texture_detail / 100.0f, applied, same_depth, writes,
+                        -float(SpartanSettings::Get().taa_lod.load()) / 100.0f, applied, same_depth, writes,
                         small, no_color, calls - same_depth);
             same_depth = writes = small = no_color = applied = calls = 0;
         }

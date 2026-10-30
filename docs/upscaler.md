@@ -360,45 +360,6 @@ skipping screen-space passes (3 or 4 indices) so a shifted full-screen quad leav
   moving objects 90%, edges 70%, texture detail 75%, sharpening 165%. They live in
   `shim/spartanport_settings.h` and in the menu hints.
 
-### FSR 3.1 Native AA (`fsr_reactive.comp`)
-
-FSR gets the same camera motion, remapped depth and jitter as TAA (`RunLdr`, `taa == false`). The
-game draws characters and foliage without motion vectors, so FSR alone smears them: in the simulator
-the moving-region PSNR is 18.8 dB (TAA ~27 dB) while static scenes are better than TAA (37.0 dB,
-frame flicker 0.0010 against TAA's 0.002).
-
-A reactive mask closes the gap. `fsr_reactive.comp` compares the 3x3 luma patch of this frame (tonemapped
-linear luma, as in the TAA detector) with FSR's own result of the last frame (the accumulated picture,
-copied before sharpening into `fsr_previous_image`): a static pixel differs by ~0.01 even on a jittered
-aliased texture, a mover by ~0.09. Like the TAA detector, a pixel needs a flagged neighbour in the last
-frame (two `R8` flag images ping-pong), otherwise only 20% of the mask is kept. Comparing with the
-previous *input* instead (jitter makes aliased textures differ) cost flicker 0.0051; with the previous FSR
-result 0.0012 (bright simulator picture: static 36.8 dB, moving 29.0 dB).
-
-In-game findings (test26-27, GTX 1070 Ti): the absolute detector never fires on a dark picture (simulator
-with the picture at 10%: moving PSNR back to the unmasked 18.8 dB), which left a slight trail behind a
-dark Kratos. A *relative* difference (tried in test27) fixed the dark simulator, but in the game it fired
-on the quantisation and dither noise of dark textures (sRGB codes 5 -> 10 are a 2x change in linear
-light) over the whole static picture: "very aggressive flicker" at every setting above 0. The absolute
-tonemapped detector is back. The menu slider "Moving objects" (`fsr_mask`, default 60%) is the
-sensitivity: the mask starts at a luma difference of 0.03 / s (0.05 at 60%) and is full at twice that;
-0 turns the mask off (toggle `1 << 27` too). The debug checkbox of the FSR panel highlights the mask (it
-shows blue in the game: the scene colour's channel order). The mask is off for the first frame after a
-reset or a skipped scene. Moving object edges (`fsr_edge.comp`, slider `fsr_edges`, default 70%): where the mask refuses FSR's history a
-mover shows the single jittered sample of the current frame, i.e. stair-stepped edges. A 3-tap filter along
-the edge normal (the one of the TAA) is applied there only (weight = mask / 0.6 x Sobel edge strength),
-reading the unfiltered copy of FSR's result, so the reference of the next frame stays clean. Further mask
-tuning was tried in the simulator and is a plateau: start 0.04..0.06 and 0.2..0.35 kept without a flagged
-neighbour all land within 1 dB (moving 27-30 dB, static flicker 0.0012-0.0016); passing the same mask as
-FSR's transparency-and-composition mask gave nothing more than the reactive mask alone.
-
-In-game tuning (test28, GTX 1070 Ti): 50-70% is the best compromise, below 50% Kratos ghosts, so the
-default is 60%. The FSR panel has its own "Texture detail" (`fsr_lod`, default 0%, TAA keeps `taa_lod`
-75%): the negative mip bias did nothing visible on the environment (with anisotropic filtering the
-surfaces are already sampled at their finest detail) and only added shimmer on Kratos, who is skinned
-and has no motion vectors. FSR's `DEPTH_INFINITE` and auto-exposure flags and the context's own sharpening were
-measured and left as they are.
-
 ### Simulator
 
 The tuning used a software renderer of a procedural scene (static, slow and fast camera, moving box)

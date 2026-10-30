@@ -154,14 +154,8 @@ void Set(Values& v, const std::string& key, const std::string& value) {
         v.taa_objects = std::clamp(i, 0, 100);
     } else if (key == "taa_lod") {
         v.taa_lod = std::clamp(i, 0, 150);
-    } else if (key == "fsr_lod") {
-        v.fsr_lod = std::clamp(i, 0, 150);
     } else if (key == "taa_spatial") {
         v.taa_spatial = std::clamp(i, 0, 100);
-    } else if (key == "fsr_edges") {
-        v.fsr_edges = std::clamp(i, 0, 100);
-    } else if (key == "fsr_mask") {
-        v.fsr_mask = std::clamp(i, 0, 100);
     } else if (key == "taa_sharpen") {
         v.taa_sharpen = std::clamp(i, 0, 200);
     } else if (key == "frames_queued") {
@@ -487,9 +481,9 @@ void Save() {
                  v.mouse_aim_style.load(), v.mouse_aim_sensitivity.load());
     std::fprintf(file, "depth_of_field=%d\n", int(v.depth_of_field.load()));
     std::fprintf(file, "taa_static=%d\ntaa_moving=%d\ntaa_tolerance=%d\ntaa_objects=%d\ntaa_sharpen=%d\n"
-                 "taa_lod=%d\ntaa_spatial=%d\nfsr_mask=%d\nfsr_lod=%d\nfsr_edges=%d\n",
+                 "taa_lod=%d\ntaa_spatial=%d\n",
                  v.taa_static.load(), v.taa_moving.load(), v.taa_tolerance.load(), v.taa_objects.load(),
-                 v.taa_sharpen.load(), v.taa_lod.load(), v.taa_spatial.load(), v.fsr_mask.load(), v.fsr_lod.load(), v.fsr_edges.load());
+                 v.taa_sharpen.load(), v.taa_lod.load(), v.taa_spatial.load());
     std::fprintf(file, "anti_aliasing=%s\n",
                  SpartanGraphics::AntiAliasingKeys[std::clamp(v.anti_aliasing.load(), 0, int(SpartanGraphics::AaSmaa))].data());
     std::fprintf(file, "master_volume=%d\naudio_channels=%s\n", v.master_volume.load(),
