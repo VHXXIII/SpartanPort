@@ -9,6 +9,11 @@
 #include "spartanport_graphics.h"
 #include "spartanport_settings.h"
 #include "../gpu/spartanportgpu.h"
+#include "../src/graphics_hook.h"
+
+// src/probe.c's side of Options > Graphics (src/graphics_hook.h).
+extern "C" uintptr_t spartanport_graphics_flag(unsigned id);
+extern "C" void spartanport_graphics_status(unsigned id);
 
 namespace G = SpartanGraphics;
 
@@ -315,7 +320,80 @@ int main() {
     assert(spartanportgpu_enemy_health_bar(0) == 1);
     assert(spartanportgpu_enemy_health_bar(1) == 0 && !v.enemy_health_bar);
     assert(Read(path).find("enemy_health_bar=0\n") != std::string::npos);
+
+    {
+        std::ofstream out(path);
+        out << "menu_confirm_swap=1\n";
+    }
+    SpartanSettings::Load();
+    assert(v.menu_confirm_swap == 1 && spartanportgpu_menu_confirm_swap() == 1);
+    SpartanSettings::Save();
+    assert(Read(path).find("menu_confirm_swap=1\n") != std::string::npos);
+
+    {
+        std::ofstream out(path);
+        out << "menu_confirm=circle\n";
+    }
+    SpartanSettings::Load();
+    assert(v.menu_confirm_swap == 1);
+
+    {
+        std::ofstream out(path);
+        out << "menu_confirm_swap=0\n";
+    }
+    SpartanSettings::Load();
+    assert(v.menu_confirm_swap == 0 && spartanportgpu_menu_confirm_swap() == 0);
+    SpartanSettings::Save();
+    assert(Read(path).find("menu_confirm_swap=0\n") != std::string::npos);
+
+    // Conflicting keys in INI: primary menu_confirm_swap always overrides alias menu_confirm
+    {
+        std::ofstream out(path);
+        out << "menu_confirm_swap=0\nmenu_confirm=circle\n";
+    }
+    SpartanSettings::Load();
+    assert(v.menu_confirm_swap == 0);
+    {
+        std::ofstream out(path);
+        out << "menu_confirm=circle\nmenu_confirm_swap=0\n";
+    }
+    SpartanSettings::Load();
+    assert(v.menu_confirm_swap == 0);
+    {
+        std::ofstream out(path);
+        out << "menu_confirm_swap=1\nmenu_confirm=cross\n";
+    }
+    SpartanSettings::Load();
+    assert(v.menu_confirm_swap == 1);
+
+    SetEnvironment("SPARTAN_MENU_CONFIRM_SWAP", "1");
+    SpartanSettings::Load();
+    assert(v.menu_confirm_swap == 1);
+    SetEnvironment("SPARTAN_MENU_CONFIRM_SWAP", "");
     const auto text = [](unsigned id) { return reinterpret_cast<const char*>(spartanportgpu_native_setting(id)); };
+    v.anisotropy = 0;
+    assert(spartanportgpu_native_setting(0xf74) != 0);
+    assert(std::string(text(0xf94)) == "2x" && v.anisotropy == 2);
+    assert(std::string(text(0xf84)) == "Game default" && v.anisotropy == 0);
+    assert(spartanportgpu_native_setting(0xfa4) != 0);
+    assert(std::string(text(0xfa4)).find("PlayStation") != std::string::npos);
+    spartanportgpu_native_setting(0xfb1);
+    assert(std::string(text(0xfa4)).find("Xbox") != std::string::npos);
+    v.vibration = 0;
+    spartanportgpu_native_setting(0xfab);
+    assert(v.vibration == 0);
+    spartanportgpu_native_setting(0xfb2);
+    assert(v.vibration == 5);
+    v.mouse_aim_sensitivity = 200;
+    spartanportgpu_native_setting(0xfb3);
+    assert(v.mouse_aim_sensitivity == 200);
+    v.mouse_prompt_distance = 16;
+    spartanportgpu_native_setting(0xfae);
+    assert(v.mouse_prompt_distance == 16);
+    v.anisotropy = 16;
+    spartanportgpu_native_setting(0xfb7);
+    assert(v.vibration == 100 && v.mouse_aim_sensitivity == 100 && v.mouse_prompt_distance == 48);
+    assert(v.mouse_lock && v.mouse_aim_style == 0 && v.anisotropy == 16);
     v.cheats_supported = 0;
     v.cheats[0] = false;
     assert(std::string(text(0xf10)) == "Unavailable" && !v.cheats[0]);
@@ -364,6 +442,177 @@ int main() {
     assert(spartanportgpu_native_setting(0xf60) == 0 && v.red_orb_multiplier == 1.0f);
     assert(Read(path).find("red_orb_multiplier=1.000\n") != std::string::npos);
     assert(spartanportgpu_native_setting(0xf08) == 0 && spartanportgpu_native_setting(0xf26) == 0);
+    SetEnvironment("SPARTAN_LANGUAGE", "1");
+    v.frames_queued = 1;
+    assert(std::string(text(0xf70)) == "1");
+    assert(std::string(text(0xf90)) == "2" && v.frames_queued == 2);
+    assert(std::string(text(0xf90)) == "Unlimited" && v.frames_queued == 0);
+    assert(std::string(text(0xf80)) == "2" && v.frames_queued == 2);
+    v.async_shaders = false;
+    assert(std::string(text(0xf91)) == "On" && v.async_shaders);
+    assert(std::string(text(0xf81)) == "Off" && !v.async_shaders);
+    v.rcas = true;
+    v.rcas_applied = false;
+    v.image_width = 2560;
+    v.window_width = 1920;
+    v.image_height = v.window_height = 1080;
+    v.rcas_strength = 75;
+    assert(std::string(text(0xf93)) == "-" && v.rcas_strength == 75);
+    v.image_width = v.window_width = 1920;
+    v.image_height = v.window_height = 1080;
+    v.rcas = false;
+    assert(std::string(text(0xf92)) == "On" && v.rcas);
+    assert(std::string(text(0xf73)) == "75%");  // eligibility does not lag one frame after enabling RCAS
+    v.rcas_applied = true;
+    assert(std::string(text(0xf83)) == "70%" && v.rcas_strength == 70);
+    v.rcas_strength = 100;
+    assert(std::string(text(0xf93)) == "100%" && v.rcas_strength == 100);
+    v.rcas_strength = 0;
+    assert(std::string(text(0xf83)) == "0%" && spartanportgpu_native_setting(0xfa3) == 0);
+    v.rcas = false;
+    assert(std::string(text(0xf93)) == "-" && v.rcas_strength == 0);
+    assert(spartanportgpu_native_setting(0xfc8) == 0);
+    v.fps_limit = 144;
+    v.engine_fps = 180;
+    v.render_resolution = 4;
+    v.vsync = false;
+    v.anisotropy = 8;
+    v.cheats[0] = true;
+    v.damage_dealt = 2.0f;
+    assert(spartanportgpu_native_setting(0xfb0) == 0);
+    assert(v.frames_queued == 1 && v.async_shaders && v.rcas && v.rcas_strength == 75);
+    assert(v.fps_limit == 144 && v.engine_fps == 180 && v.render_resolution == 4 && !v.vsync);
+    assert(v.anisotropy == 0 && v.cheats[0] && v.damage_dealt == 2.0f);
+    v.rcas_strength = 0;
+    SpartanSettings::Load();
+    assert(v.rcas_strength == 75 && v.async_shaders && v.frames_queued == 1 && v.rcas);
+    SetEnvironment("SPARTAN_LANGUAGE", "17");
+    v.async_shaders = false;
+    assert(std::string(text(0xf71)) == "Desligada");
+    assert(std::string(text(0xf91)) == "Ligada");
+    assert(std::string(text(0xf74)) == "Padrão do jogo");
+    SetEnvironment("SPARTAN_LANGUAGE", "");
+    v.render_resolution = 0;
+    const auto initial_aspect = std::string(text(0xfc1));
+    assert(initial_aspect.find("16:9") != std::string::npos);
+    spartanportgpu_native_setting(0xfe1);
+    assert(std::string(text(0xfc1)).find("16:10") != std::string::npos);
+    assert(v.render_resolution != 0);
+    spartanportgpu_native_setting(0xfe0);
+    assert(std::string(text(0xfc1)).find("16:10") != std::string::npos);
+    v.monitors = {0, 2};
+    v.monitor = -1;
+    spartanportgpu_native_setting(0xfe4);
+    assert(v.monitor == 0);
+    spartanportgpu_native_setting(0xfe4);
+    assert(v.monitor == 2);
+    spartanportgpu_native_setting(0xfe4);
+    assert(v.monitor == -1);
+    v.hdr = false;
+    spartanportgpu_native_setting(0xfe7);
+    assert(v.hdr);
+    SpartanSettings::Save();
+    v.monitor = 2;
+    v.hdr = false;
+    SpartanSettings::Load();
+    assert(v.monitor == -1 && v.hdr);
+    v.hdr = !v.startup_hdr;
+    assert(SpartanSettings::GraphicsNeedRestart());
+    SetEnvironment("SPARTAN_RESTART_COMMAND", "");
+    assert(spartanportgpu_native_setting(0xfcb) == 0);
+    SetEnvironment("SPARTAN_RESTART_COMMAND", "test-only");
+    assert(spartanportgpu_native_setting(0xfcb) == 1 && v.restart_unconfirmed);
+    SetEnvironment("SPARTAN_RESTART_COMMAND", "");
+    v.render_resolution = v.startup_render_resolution;
+    v.monitor = v.startup_monitor;
+    v.hdr = v.startup_hdr;
+    v.restart_unconfirmed = false;
+    v.fps_limit = 0;
+    spartanportgpu_native_setting(0xfe2);
+    assert(v.fps_limit == 30);
+    spartanportgpu_native_setting(0xfd2);
+    assert(v.fps_limit == 0);
+    for (const char* language : {"1", "17"}) {
+        SetEnvironment("SPARTAN_LANGUAGE", language);
+        const char* english[] = {"Windowed", "Borderless", "Fullscreen"};
+        const char* portuguese[] = {"Janela", "Sem bordas", "Tela cheia"};
+        for (int mode = -1; mode <= G::DisplayModeCount; ++mode) {
+            v.display_mode = mode;
+            const int expected = std::clamp(mode, 0, G::DisplayModeCount - 1);
+            const char* label = language[0] == '1' && language[1] == '7' ? portuguese[expected] : english[expected];
+            assert(std::string(text(0xfc5)) == std::string("[ArrowSpacer]") + label + "[ArrowSpacer]");
+        }
+    }
+    SetEnvironment("SPARTAN_LANGUAGE", "");
+    v.display_mode = G::Windowed;
+    spartanportgpu_native_setting(0xfe5);
+    assert(v.display_mode == G::Borderless);
+    spartanportgpu_native_setting(0xfd5);
+    assert(v.display_mode == G::Windowed);
+    v.vsync = true;
+    spartanportgpu_native_setting(0xfe6);
+    assert(!v.vsync);
+    v.engine_fps_global = nullptr;
+    v.engine_fps = 240;
+    spartanportgpu_native_setting(0xfd3);
+    assert(v.engine_fps == 240 && std::string(text(0xfc3)).find('-') != std::string::npos);
+    float live_fps = 240;
+    int32_t live_fps_integer = 240;
+    v.engine_fps_global = &live_fps;
+    v.engine_fps_int_global = &live_fps_integer;
+    v.applied_engine_fps = 240;
+    spartanportgpu_native_setting(0xfd3);
+    assert(v.engine_fps == 180);
+    SpartanSettings::SyncEngineFps();
+    assert(live_fps == 180 && live_fps_integer == 180);
+    assert(!SpartanSettings::GraphicsNeedRestart());
+    v.engine_fps_global = nullptr;
+    v.engine_fps_int_global = nullptr;
+    v.glyph_style = v.startup_glyph_style;
+    assert(!SpartanSettings::GraphicsNeedRestart());
+    for (int style = 1; style <= 4; ++style) {
+        spartanportgpu_native_setting(0xfb1);
+        assert(v.glyph_style == style % 4);
+    }
+    spartanportgpu_native_setting(0xfb1);
+    assert(v.glyph_style == 1 && SpartanSettings::GraphicsNeedRestart());
+    assert(Read(path).find("glyph_style=xbox\n") != std::string::npos);
+    v.glyph_style = 0;
+    SpartanSettings::Load();
+    assert(v.glyph_style == 1 && !SpartanSettings::GraphicsNeedRestart());
+    assert(std::string(text(0xfa4)).find("Xbox") != std::string::npos);
+
+    // Options > Graphics: f75+i query, f85+i toggle/next, f95 (and f8d) prev; "Unavailable" until the hook reports in.
+    // Rows: 0 Texture Quality (f75, f85 next, f95/f8d prev), 1 Shadows (f76, f86), 2 Motion Blur (f77, f87), 3 Bloom (f78, f88).
+    assert(std::string(text(0xf78)) == "Unavailable" && std::string(text(0xf87)) == "Unavailable");
+    assert(v.bloom && v.motion_blur);
+    spartanport_graphics_status(SPARTAN_GRAPHICS_BLOOM);
+    spartanport_graphics_status(SPARTAN_GRAPHICS_MOTION_BLUR);
+    spartanport_graphics_status(SPARTAN_GRAPHICS_TEXTURE_QUALITY);  // no toggle (no hook): ignored
+    spartanport_graphics_status(7);  // no such toggle: ignored
+    assert(v.graphics_supported == ((1u << SPARTAN_GRAPHICS_BLOOM) | (1u << SPARTAN_GRAPHICS_MOTION_BLUR)));
+    assert(spartanport_graphics_flag(SPARTAN_GRAPHICS_BLOOM) == reinterpret_cast<uintptr_t>(&v.bloom) &&
+           spartanport_graphics_flag(SPARTAN_GRAPHICS_TEXTURE_QUALITY) == 0);
+    assert(std::string(text(0xf78)) == "On" && std::string(text(0xf88)) == "Off" && !v.bloom);
+    assert(std::string(text(0xf87)) == "Off" && !v.motion_blur && std::string(text(0xf77)) == "Off");
+    assert(Read(path).find("bloom=0\n") != std::string::npos && Read(path).find("motion_blur=0\n") != std::string::npos);
+    assert(std::string(text(0xf88)) == "On" && v.bloom);
+    assert(std::string(text(0xf76)) == "Unavailable");  // Shadows not reported
+    // Texture Quality: no hook, always available. f85 steps toward Very Low, f95 (and f8d) toward High;
+    // both stop at the ends.
+    assert(std::string(text(0xf75)) == "High" && SpartanSettings::TextureLodBias(v.texture_quality) == 0.0f);
+    assert(std::string(text(0xf95)) == "High" && v.texture_quality == 0);
+    assert(std::string(text(0xf85)) == "Medium" && SpartanSettings::TextureLodBias(v.texture_quality) == 1.0f);
+    assert(std::string(text(0xf85)) == "Low" && std::string(text(0xf85)) == "Very Low");
+    assert(std::string(text(0xf85)) == "Very Low" && SpartanSettings::TextureLodBias(v.texture_quality) == 3.0f);
+    assert(Read(path).find("texture_quality=3\n") != std::string::npos);
+    assert(std::string(text(0xf95)) == "Low" && std::string(text(0xf95)) == "Medium");
+    assert(std::string(text(0xf95)) == "High" && v.texture_quality == 0);
+    assert(std::string(text(0xf85)) == "Medium");
+    assert(std::string(text(0xf8d)) == "High" && v.texture_quality == 0);
+    const bool blur_before = v.motion_blur;
+    assert(std::string(text(0xf97)) == "On" && v.motion_blur != blur_before);  // toggles toggle with f90 too
+    assert(SpartanSettings::TextureLodBias(-1) == 0.0f && SpartanSettings::TextureLodBias(9) == 0.0f);
     std::remove(path);
     std::puts("PASS: graphics settings");
 }

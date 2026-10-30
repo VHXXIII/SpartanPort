@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <vector>
 #include <string_view>
 
 namespace SpartanSettings {
@@ -44,6 +45,14 @@ inline constexpr int OutputHeights[] = {720, 1080, 1440, 2160};
 inline constexpr int OutputCount = 4;
 inline constexpr int OutputDefault = 1; ///< 1920x1080, the game's own size
 
+/// Texture Quality steps: their labels, and the extra mip LOD bias each one adds.
+inline constexpr int TextureQualityCount = 4;
+inline constexpr const char* TextureQualityNames[TextureQualityCount] = {"High", "Medium", "Low", "Very Low"};
+inline constexpr const char* TextureQualityNamesPt[TextureQualityCount] = {"Alto", "Médio", "Baixo", "Muito Baixo"};
+inline float TextureLodBias(int quality) {
+    return quality > 0 && quality < TextureQualityCount ? float(quality) : 0.0f;
+}
+
 struct Values {
     std::atomic<int> upscaler{UpscalerFsr3};
     std::atomic<int> preset{NativeAA};
@@ -63,6 +72,11 @@ struct Values {
     std::atomic<unsigned> overlay_items{7};
     std::atomic<int> overlay_scale{100}, overlay_corner{1}, overlay_opacity{50}, overlay_layout{0};
     std::atomic<int> menu_tab{0};
+    /// The menu's and the trophies' language chosen in the game (SpartanUi::Languages index), -1 for
+    /// the launcher's (SPARTAN_UI_LANGUAGE).
+    std::atomic<int> ui_language{-1};
+    /// Whether the game stops while the menu or the trophy list is open (SpartanOverlay::GamePaused).
+    std::atomic<bool> pause_game{true};
     std::atomic<float> red_orb_multiplier{1.0f};
     std::atomic<bool> red_orbs_supported{false};
     /// Damage and orb pickup multipliers (src/damage_hook.h, src/orb_hook.h), 0.1x to 100x.
@@ -78,9 +92,25 @@ struct Values {
     /// QTE prompts answered in the game's own checks (src/qte_hook.h), off by default. Live.
     std::atomic<bool> auto_qte{false};
     std::atomic<bool> qte_supported{false};
+    /// Options > Graphics (src/graphics_hook.h): the game's bloom and motion blur, on by default.
+    /// The hooks read these bytes every frame. graphics_supported: bit per SPARTAN_GRAPHICS_* id.
+    std::atomic<bool> bloom{true};
+    /// The one motion blur setting (ini key motion_blur, SPARTAN_MOTION_BLUR): read by the game hook
+    /// and by the renderer, which also skips the blur's draws when it is off (spartanport_motion_blur.h).
+    std::atomic<bool> motion_blur{true};
+    std::atomic<bool> shadows{true};
+    std::atomic<uint32_t> graphics_supported{0};
+    /// Options > Graphics > Texture Quality: 0 High (the game's own) .. TextureQualityCount - 1.
+    /// Each step reads mipmapped textures one mip level smaller (texture_cache.cpp). Live.
+    std::atomic<int> texture_quality{0};
     // Graphics (spartanport_graphics.h). Live: applied on the next frame.
     std::atomic<int> display_mode{0};
     std::atomic<bool> vsync{true};
+    std::atomic<int> monitor{-1};
+    std::atomic<bool> hdr{false};
+    int startup_monitor = -1;
+    bool startup_hdr = false;
+    std::vector<int> monitors; ///< SDL indices, populated before the guest starts
     std::atomic<int> fps_limit{0};
     std::atomic<bool> async_shaders{true};
     std::atomic<bool> fsr1{false};
@@ -106,8 +136,6 @@ struct Values {
     /// TAA debug view (not saved): red = history rejected by depth, green = lost to colour change /
     /// moving-object detection, blue = history weight used.
     std::atomic<bool> taa_debug{false};
-    /// The game's own motion blur (spartanport_motion_blur.h); off skips its draws. Live.
-    std::atomic<bool> motion_blur{true};
     /// The game's depth of field (spartanport_depth_of_field.h); off keeps the whole picture sharp. Live.
     std::atomic<bool> depth_of_field{true};
     /// Anti-aliasing of the finished frame (SpartanGraphics::AntiAliasing: off, FXAA, SMAA). Live.
@@ -125,6 +153,11 @@ struct Values {
     std::atomic<int> frames_queued{1};
     /// Controller vibration strength in percent; 0 turns it off (runtime_pad.c). Live.
     std::atomic<int> vibration{100};
+    /// Menu confirmation button: 0 Cross confirms, Circle cancels (default); 1 Circle confirms, Cross cancels. Live.
+    std::atomic<int> menu_confirm_swap{0};
+    bool menu_confirm_swap_explicit{false};
+    std::atomic<int> glyph_style{0}; ///< PlayStation, Xbox, Nintendo, keyboard, legacy automatic
+    int startup_glyph_style = 0;
     /// Master volume of the game's audio in percent, 0 to 200: above 100 boosts the mix behind a
     /// soft limiter (src/runtime_audio.c). Live.
     std::atomic<int> master_volume{MasterVolumeDefault};
@@ -158,6 +191,9 @@ struct Values {
     /// rounded. Null when this eboot.bin's code does not match. engine_fps is written there live.
     std::atomic<float*> engine_fps_global{nullptr};
     std::atomic<int32_t*> engine_fps_int_global{nullptr};
+    /// The script global inPowerUpMenu (src/probe.c finds it): non-zero while the upgrade menu is
+    /// open. Texture Quality adds no LOD bias then. Null when this eboot.bin's code does not match.
+    std::atomic<int32_t*> power_up_menu_global{nullptr};
     bool startup_deferred_readback = true, startup_stale_readback = true;
     // FSR 4 checks (menu): the provider's auto exposure, the jitter sign it is given.
     std::atomic<bool> fsr4_auto_exposure{true};

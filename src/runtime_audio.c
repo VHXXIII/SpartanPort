@@ -29,6 +29,10 @@
 #define ERR_ALREADY_INIT ((int32_t)0x8026000E)
 #define ERR_NOT_INIT ((int32_t)0x8026000F)
 #define VOLUME_0DB 32768
+/* Pad speaker ports (type 4) play on the main output. The game masters them for the
+   DualShock 4's small speaker: the weapon upgrade sound peaks at full scale, ~14 dB over the
+   loudest gameplay (#464). -15 dB puts it at the main mix's level; tune by ear. */
+#define PAD_SPEAKER_GAIN 0.17783f
 
 typedef struct {
     int used, type, channels, is_float, frames, sample_bytes, std_layout;
@@ -183,7 +187,9 @@ static void report_peaks(Port *p, int id) {
 static void shape_buffer(const Port *p, const void *data, void *out, float master) {
     static const int remap[8]={0,1,2,3,6,7,4,5};
     float gain[8];
-    for (int c=0;c<p->channels;++c) gain[c]=(float)p->volume[c]/VOLUME_0DB*master;
+    /* Pad speaker ports (type 4) are mastered for the DualShock 4's speaker: PAD_SPEAKER_GAIN. */
+    const float port_gain=master*(p->type==4 ? PAD_SPEAKER_GAIN : 1.0f);
+    for (int c=0;c<p->channels;++c) gain[c]=(float)p->volume[c]/VOLUME_0DB*port_gain;
     const int fold=p->channels==8 && p->out_channels<8, limit=fold || master>1.0f;
     const int n=fold ? p->out_channels : p->channels;
     for (size_t f=0;f<(size_t)p->frames;++f) {
@@ -323,6 +329,8 @@ static ABI int32_t audio_close(int32_t handle) {
 }
 /* `pace`: wait for this port's next period. sceAudioOutOutputs waits once for all its ports. */
 static int32_t output_port(int32_t handle, const void *data, int pace) {
+    /* The menu or the trophy list pauses the game: its sound waits with it (the cadence restarts). */
+    if (pace) spartanportgpu_wait_while_paused();
     int32_t error=0;
     pthread_mutex_lock(&table_lock);
     Port *p=port_of(handle,&error);
