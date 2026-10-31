@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "spartanport_settings.h"
 #include "spartanport_toggles.h"
 
 #include "video_core/host_shaders/camera_motion_comp.h"
@@ -521,6 +522,13 @@ void CameraMotion::OnViewProjection(const float* matrix, VideoCore::ImageId dept
 void CameraMotion::OnDisplayPass(VideoCore::ImageId frame) {
     if (debug_overlay && frame && depth_id && current.valid && previous.valid) {
         Overlay(frame);
+    }
+    if (SpartanSettings::Get().upscaler != SpartanSettings::UpscalerTaa) {
+        // Upscaler path (FSR): the unchanged upstream behaviour, nothing of the scene TAA applies.
+        if (!frame_has_camera) InvalidateHistory();
+        frame_has_camera = false;
+        depth_id = {};
+        return;
     }
     // A scene (pre-pass) that no composite closed for a few frames is dropped.
     // The game repeats display passes at 60 Hz while a heavy scene (an arena) takes several of them

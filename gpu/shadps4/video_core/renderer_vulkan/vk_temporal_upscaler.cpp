@@ -338,7 +338,7 @@ bool TemporalUpscaler::OnFrameStart() {
     // God of War III (view-projection camera): the frame is the scene, from its first depth
     // pre-pass draw to its composite (OnSceneStart); the display passes do not delimit it (the
     // game repeats frames and may start the next scene before the display pass of the last).
-    const bool scene_frames = camera_motion.ViewProjectionCamera();
+    const bool scene_frames = SceneTaa() && camera_motion.ViewProjectionCamera();
     if (changed || (!dispatched_last_frame && !scene_frames)) reset = true;
     if (changed) jitter_index = 0;
     applied_preset = preset;
@@ -426,7 +426,7 @@ void TemporalUpscaler::NoteSkip() {
 
 void TemporalUpscaler::OnSceneStart() {
     ++scene_counter;
-    if (!camera_motion.ViewProjectionCamera()) {
+    if (!SceneTaa() || !camera_motion.ViewProjectionCamera()) {
         return; // OnFrameStart delimits the frame
     }
     if (!dispatched_last_frame) {
