@@ -1203,11 +1203,14 @@ void TemporalUpscaler::RecordTaa(vk::CommandBuffer cmdbuf, vk::ImageView color,
     cmdbuf.dispatch((out_width + 7) / 8, (out_height + 7) / 8, 1);
     const auto& settings = SpartanSettings::Get();
     float strength = std::clamp(settings.sharpness.load(), 0.0f, 2.0f);
-    if (camera_motion.ViewProjectionCamera() && settings.sharpen) {
-        // the 8-bit scene is softened by the history resampling: its own, menu-set strength
+    bool sharpen = settings.sharpen;
+    if (camera_motion.ViewProjectionCamera()) {
+        // the 8-bit scene is softened by the history resampling: its own, menu-set strength.
+        // The menu's "Sharpening (RCAS)" switch turns it off too.
+        sharpen = sharpen && settings.rcas;
         strength = std::clamp(settings.taa_sharpen.load() / 100.0f, 0.0f, 2.0f);
     }
-    if (settings.sharpen && strength > 0.0f && !(params.pad & 0xffu)) {
+    if (sharpen && strength > 0.0f && !(params.pad & 0xffu)) {
         const vk::MemoryBarrier2 resolved{
             .srcStageMask = vk::PipelineStageFlagBits2::eComputeShader,
             .srcAccessMask = vk::AccessFlagBits2::eShaderStorageWrite,

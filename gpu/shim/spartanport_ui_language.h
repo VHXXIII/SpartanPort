@@ -76,6 +76,8 @@ inline constexpr std::pair<std::string_view, const char*> ChineseText[] = {
     {"Damage taken", "受到伤害"},
     {"Deferred GPU readbacks", "延迟 GPU 回读"},
     {"Depth of field", "景深"},
+    {"Motion blur", "动态模糊"},
+    {"The game's own motion blur on fast moving objects and the camera. Off removes it.", "游戏自带的动态模糊，作用于快速移动的物体和镜头。关闭后即可去除。"},
     {"Display", "显示"},
     {"Display mode", "显示模式"},
     {"Effective limit", "实际帧率上限"},

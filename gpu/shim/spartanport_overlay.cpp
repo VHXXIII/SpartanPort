@@ -523,7 +523,7 @@ void ImageTab() {
     }
     const int iw = s.image_width, ih = s.image_height, ww = s.window_width, wh = s.window_height;
     const bool downscaling = iw > ww || ih > wh;
-    const bool rcas_blocked = s.rcas && !s.rcas_applied;
+    const bool rcas_blocked = s.rcas && !s.rcas_applied && s.upscaler != SpartanSettings::UpscalerTaa;
     if (s.upscaler == SpartanSettings::UpscalerTaa) {
         DisabledText(s.temporal_applied ? "Temporal anti-aliasing is running."
                                         : "Temporal anti-aliasing is selected but not running (see last_run.log).");
@@ -561,7 +561,7 @@ void ImageTab() {
                      "Shows where the history is used: red = rejected by depth, green = lost to colour "
                      "change, blue = history weight used. For bug reports; not saved.");
             SliderRow("TAA sharpening", s.taa_sharpen, 0, 200, "%d%%",
-                      "Sharpening after the accumulation. Default 165%.");
+                      "Sharpening after the accumulation; the Sharpening (RCAS) switch below turns it off. Default 165%.");
             ImGui::EndTable();
         }
     }
@@ -624,6 +624,8 @@ void ImageTab() {
     }
     Separator("Effects");
     if (BeginRows("##effects")) {
+        CheckRow("Motion blur", s.motion_blur,
+                 "The game's own motion blur on fast moving objects and the camera. Off removes it.");
         CheckRow("Depth of field", s.depth_of_field,
                  "The game's own blur of distant objects, strongest in cutscenes. Off keeps the whole picture sharp.");
         ImGui::EndTable();
