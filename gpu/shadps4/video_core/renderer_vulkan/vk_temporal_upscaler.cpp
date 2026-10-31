@@ -697,7 +697,7 @@ void TemporalUpscaler::RunLdr() {
         }
     }
     reset = false;
-    dispatched_last_frame = true;
+    dispatched_last_frame = true; frames_since_run = 0;
     ExtraSharpen(cmdbuf, vk::Image(output_image), false, w, h);
     if (dump >= 0) {
         DumpImages(instance, scheduler, cmdbuf, dump,
