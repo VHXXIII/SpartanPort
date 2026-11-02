@@ -14,6 +14,8 @@
 #include "qte_hook.h"
 #include "switch_hook.h"
 #include "actor_hook.h"
+#include "player_hook.h"
+#include "ledge_hook.h"
 #include "damage_hook.h"
 #include "menu_hook.h"
 #include "graphics_hook.h"
@@ -504,6 +506,9 @@ static void publish_engine_fps(void) {
  * is set (texture_cache.cpp), so the red orb medallion stays sharp. */
 extern void spartanport_power_up_menu_global(uintptr_t flag);
 static uint64_t power_up_menu_at; /* image offset; 0: not found */
+/* inShell, inPauseMenu, inPowerUpMenu (image offsets; 0: not found): bloom stays on while a menu
+ * is open (install_graphics). */
+static uint64_t menu_flags_at[3];
 /* Before the image is protected, like find_engine_fps. */
 static void find_power_up_menu(Segment *segments, uint64_t count, uint64_t size) {
     const uint64_t at=spartanport_signature_find(image,size,&spartanport_power_up_menu_site);
@@ -511,12 +516,15 @@ static void find_power_up_menu(Segment *segments, uint64_t count, uint64_t size)
         puts("Texture Quality: upgrade menu exception unavailable (code not found in this eboot.bin)");
         return;
     }
-    const uint64_t flag=spartanport_rip_target(image,at+SPARTAN_POWER_UP_MENU_LEA);
-    if (!mapped(segments,count,flag,4)) {
+    for (unsigned m=0;m<3;++m) {
+        const uint64_t flag=spartanport_rip_target(image,at+m*(SPARTAN_POWER_UP_MENU_LEA/2));
+        if (mapped(segments,count,flag,4)) menu_flags_at[m]=flag;
+    }
+    if (!menu_flags_at[2]) {
         puts("Texture Quality: upgrade menu exception unavailable (global outside the image)");
         return;
     }
-    power_up_menu_at=flag;
+    power_up_menu_at=menu_flags_at[2];
 }
 static void publish_power_up_menu(void) {
     if (!power_up_menu_at) return;
@@ -547,6 +555,61 @@ static void install_actor_watch(Segment *segments, uint64_t count, uint64_t size
     memset(image + at + 5, 0x90, SPARTAN_ACTOR_HOOK_LENGTH - 5);
     spartanport_actor_status(1);
     printf("Health display: damage hook ready (enemy health bar in the menu)\n");
+}
+
+/* Kratos' object (src/player_hook.h), for the Cronos blade pull cap in runtime_pad.c. */
+static void install_player_hook(Segment *segments, uint64_t count, uint64_t size) {
+    const uint64_t at = spartanport_signature_find(image, size, &spartanport_player_site);
+    if (at == UINT64_MAX || !mapped(segments, count, at, SPARTAN_PLAYER_HOOK_LENGTH) ||
+        !spartanport_player_match(image + at, size - at)) {
+        printf("Player hook: unavailable (code not found in this eboot.bin)\n");
+        return;
+    }
+    int32_t displacement;
+    memcpy(&displacement, image + at + 3, 4);
+    const int64_t rate = (int64_t)at + SPARTAN_PLAYER_HOOK_LENGTH + displacement;
+    unsigned char *stub = allocate(page_size);
+    const int64_t delta = (int64_t)(uintptr_t)stub - (int64_t)(uintptr_t)(image + at + 5);
+    if (rate < 0 || !mapped(segments, count, (uint64_t)rate, 4) || delta < INT32_MIN || delta > INT32_MAX) {
+        printf("Player hook: unavailable (operand or hook outside range)\n");
+        return;
+    }
+    spartanport_player_stub(stub, (uintptr_t)&runtime_player_object, (uintptr_t)(image + rate),
+                            (uintptr_t)(image + at + SPARTAN_PLAYER_HOOK_LENGTH));
+    protect(stub, page_size, 5);
+    const int32_t relative = (int32_t)delta;
+    image[at] = 0xe9;
+    memcpy(image + at + 1, &relative, 4);
+    memset(image + at + 5, 0x90, SPARTAN_PLAYER_HOOK_LENGTH - 5);
+    printf("Player hook: ready at image+0x%" PRIx64 "\n", at);
+}
+
+/* Wall seam fix (src/ledge_hook.h): present only when the launcher's "Wall Seam Fix" patch swapped
+ * 31 c9 for 33 c9 after the ledge ray call. */
+static _Alignas(64) SpartanLedgeCache ledge_cache;
+static void install_wall_seam_fix(Segment *segments, uint64_t count, uint64_t size) {
+    const uint64_t seam = spartanport_signature_find(image, size, &spartanport_ledge_site);
+    if (seam == UINT64_MAX) return;
+    int32_t call, lea;
+    memcpy(&call, image + seam + 1, 4);
+    memcpy(&lea, image + seam + 18, 4);
+    const int64_t callee = (int64_t)seam + 5 + call, result = (int64_t)seam + 22 + lea;
+    unsigned char *stub = allocate(page_size);
+    const int64_t delta = (int64_t)(uintptr_t)stub - (int64_t)(uintptr_t)(image + seam + 5);
+    if (callee < 0 || result < 0 || !mapped(segments, count, (uint64_t)callee, 1) ||
+        !mapped(segments, count, (uint64_t)result, SPARTAN_LEDGE_RESULT_WORDS * 4) ||
+        delta < INT32_MIN || delta > INT32_MAX) {
+        puts("Wall seam fix: skipped (call, result or hook outside range)");
+        return;
+    }
+    ledge_cache.result = (uintptr_t)(image + result);
+    spartanport_ledge_stub(stub, (uintptr_t)&ledge_cache, (uintptr_t)spartanport_ledge_ray,
+                           (uintptr_t)(image + callee), (uintptr_t)(image + seam + 5));
+    protect(stub, page_size, 5);
+    const int32_t relative = (int32_t)delta;
+    image[seam] = 0xe9;
+    memcpy(image + seam + 1, &relative, 4);
+    printf("Wall seam fix: ready at image+0x%" PRIx64 "\n", seam);
 }
 
 /* QTE prompts (src/qte_hook.h): a frame count in the prompt's update and an answer in its
@@ -605,6 +668,8 @@ static void install_auto_qte_hooks(Segment *segments, uint64_t count, uint64_t s
                                               SPARTAN_QTE_CIRCLE_LENGTH};
     const char *names[AUTO_QTE_SITES] = {"button", "repeated press", "held press", "Circle struggle"};
     const uintptr_t automatic = spartanport_auto_qte_flag();
+    SpartanQteState *state = (SpartanQteState *)spartanport_qte_state_address();
+    _Static_assert((int)AUTO_QTE_SITES == (int)SPARTAN_QTE_COUNTS, "one frame count per site");
     unsigned char *stubs = allocate(page_size);
     uint64_t sites[AUTO_QTE_SITES];
     int32_t relative[AUTO_QTE_SITES] = {0};
@@ -625,11 +690,14 @@ static void install_auto_qte_hooks(Segment *segments, uint64_t count, uint64_t s
         }
         relative[i] = (int32_t)delta;
         const uintptr_t resume = (uintptr_t)(image + sites[i] + lengths[i]);
-        if (i == 0) spartanport_qte_build_timed_stub(stub, automatic, resume);
-        else if (i == 1) spartanport_qte_build_repeat_stub(stub, automatic,
+        /* The sites are in SPARTAN_QTE_COUNT_* order: each stub counts its kind's frames. */
+        const uintptr_t frames = (uintptr_t)&state->kinds[i];
+        if (i == 0) spartanport_qte_build_timed_stub(stub, frames, automatic, resume);
+        else if (i == 1) spartanport_qte_build_repeat_stub(stub, frames, automatic,
                                                     (uintptr_t)(image + spartanport_qte_call_target(image + sites[i], sites[i])));
-        else if (i == 2) spartanport_qte_build_charged_stub(stub, automatic, resume);
-        else spartanport_qte_build_circle_stub(stub, automatic, resume, (uintptr_t)(image + sites[i] + SPARTAN_QTE_CIRCLE_SKIP));
+        else if (i == 2) spartanport_qte_build_charged_stub(stub, frames, automatic, resume);
+        else spartanport_qte_build_circle_stub(stub, frames, automatic, resume,
+                                        (uintptr_t)(image + sites[i] + SPARTAN_QTE_CIRCLE_SKIP));
     }
     protect(stubs, page_size, 5);
     for (unsigned i = 0; i < AUTO_QTE_SITES; ++i) {
@@ -797,9 +865,15 @@ static void install_graphics(Segment *segments, uint64_t count, uint64_t size) {
         spartanport_motion_blur_build_stub(stubs, spartanport_graphics_flag(SPARTAN_GRAPHICS_MOTION_BLUR),
                                            (uintptr_t)(image + gate), (uintptr_t)(image + queued),
                                            (uintptr_t)(image + blur_at + SPARTAN_MOTION_BLUR_HOOK_LENGTH));
-    if (bloom)
-        spartanport_bloom_build_stub(stubs + 256, spartanport_graphics_flag(SPARTAN_GRAPHICS_BLOOM),
+    if (bloom) {
+        uintptr_t menus[3] = {0};
+        for (unsigned m = 0; m < 3; ++m)
+            if (menu_flags_at[m]) menus[m] = (uintptr_t)(image + menu_flags_at[m]);
+        if (!menus[0] && !menus[1] && !menus[2])
+            puts("Graphics: bloom stays off in menus too (menu flags not found in this eboot.bin)");
+        spartanport_bloom_build_stub(stubs + 256, spartanport_graphics_flag(SPARTAN_GRAPHICS_BLOOM), menus,
                                      (uintptr_t)(image + bloom_at + SPARTAN_BLOOM_HOOK_LENGTH));
+    }
     if (shadows)
         spartanport_shadows_build_stub(stubs + 768, spartanport_graphics_flag(SPARTAN_GRAPHICS_SHADOWS),
                                        (uintptr_t)(image + shadows_at + SPARTAN_SHADOWS_HOOK_LENGTH));
@@ -817,6 +891,7 @@ static void install_graphics(Segment *segments, uint64_t count, uint64_t size) {
  * does: GPU, audio and guest threads are still running, so no destructors. */
 static void menu_quit(void) {
     puts("Pause menu: Exit to Desktop");
+    spartanportgpu_flush_cache();
     fflush(NULL);
 #ifdef _WIN32
     TerminateProcess(GetCurrentProcess(),0);
@@ -893,6 +968,7 @@ static void apply_patches(const char *path, Segment *segments, uint64_t ns, cons
  * applied at start). Descriptors are closed first so the old GPU device and its memory are
  * released before the new process opens its own. */
 void runtime_restart(void) {
+    spartanportgpu_flush_cache();
     fflush(NULL);
 #ifdef _WIN32
     /* run.py sets SPARTAN_RESTART_COMMAND: the launch command line, started again (new patches). */
@@ -1304,6 +1380,8 @@ int main(int argc, char **argv) {
     if (gpu_enabled) find_engine_fps(segments, ns, size);
     if (gpu_enabled) find_power_up_menu(segments, ns, size);
     if (gpu_enabled) install_actor_watch(segments, ns, size);
+    if (gpu_enabled) install_player_hook(segments, ns, size);
+    if (gpu_enabled) install_wall_seam_fix(segments, ns, size);
     if (gpu_enabled) install_stat_multipliers(segments, ns, size);
     if (gpu_enabled) install_graphics(segments, ns, size);
     if (gpu_enabled) install_auto_qte_hooks(segments, ns, size, install_qte_hooks(segments, ns, size));

@@ -380,8 +380,10 @@ pub static SETTINGS: &[Setting] = &[
         31,
     ),
     ini("frame_generation_frames", Kind::Int, Text("1"), false, 32),
+    // F2: the engine at 60 FPS while a QTE prompt is up, read by the game itself.
+    ini("auto_safe_fps", Flag, Bool(true), true, 33),
     // FXAA / SMAA of the finished frame, read by the game from spartanport.ini.
-    ini("anti_aliasing", Pick(ANTI_ALIASING), Text("off"), true, 33),
+    ini("anti_aliasing", Pick(ANTI_ALIASING), Text("off"), true, 34),
     ini("object_motion", Flag, Bool(true), false, 2),
     ini("output_res", Pick(OUTPUTS), Text("1920x1080"), false, 4),
     ini(
@@ -531,7 +533,7 @@ mod tests {
 
     #[test]
     fn shown_ini_keys_are_the_30_controls_of_the_window() {
-        assert_eq!(SHOWN_INI_KEYS.len(), 30);
+        assert_eq!(SHOWN_INI_KEYS.len(), 31);
         for seeded in ["monitor", "hdr", "glyph_style"] {
             assert!(SHOWN_INI_KEYS.contains(&seeded), "{seeded}");
         }
