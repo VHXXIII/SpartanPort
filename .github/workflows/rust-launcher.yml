@@ -10,6 +10,9 @@ on:
       - 'launcher-rust/**'
       - '.github/workflows/rust-launcher.yml'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:
@@ -29,11 +32,16 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libwayland-dev libxkbcommon-dev
       - run: cargo test
         continue-on-error: true
-      - uses: actions/upload-artifact@v4
+      - name: Commit snapshots
         if: always() && runner.os == 'Windows'
-        with:
-          name: snapshots
-          path: launcher-rust/snapshots/graphics-*.png
+        shell: bash
+        working-directory: .
+        run: |
+          git config user.name snapshots
+          git config user.email snapshots@example.invalid
+          git add launcher-rust/snapshots
+          git commit -m "snapshots: graphics page made on Windows" || exit 0
+          git push origin HEAD:${GITHUB_REF_NAME}
       - run: cargo build --release
       - uses: actions/upload-artifact@v4
         with:
