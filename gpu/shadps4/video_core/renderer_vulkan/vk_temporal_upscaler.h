@@ -74,6 +74,8 @@ public:
     /// The temporal upscaler is the port's own TAA (God of War III's scene frames, camera found by
     /// content, one jitter per scene); every other mode takes the FSR path.
     [[nodiscard]] bool SceneTaa() const;
+    /// The upscaler's own sharpening is on (launcher setting and the menu's RCAS switch).
+    [[nodiscard]] bool SharpenOn() const;
 
     /// Draws into this depth image are jittered: the scene depth, and the full-size copy the
     /// transparent pass uses (same size as the scene depth, written by the game).

@@ -667,7 +667,7 @@ void TemporalUpscaler::RunLdr() {
         info.cameraVerticalFovRadians = camera_motion.VerticalFov();
         info.viewSpaceToMeters = 1.0f;
         info.sharpness = std::min(SpartanSettings::Get().sharpness.load(), 1.0f);
-        info.enableSharpening = SpartanSettings::Get().sharpen ? VK_TRUE : VK_FALSE;
+        info.enableSharpening = SharpenOn() ? VK_TRUE : VK_FALSE;
         info.reset = reset ? VK_TRUE : VK_FALSE;
         info.frameId = frame_id++;
         FfxVkPortableUpscaleCreateInfo create_info{};
@@ -732,6 +732,13 @@ void TemporalUpscaler::OnDispatch(u64 cs_hash) {
         return;
     }
     Run();
+}
+
+bool TemporalUpscaler::SharpenOn() const {
+    // The launcher's sharpen and the menu's "Sharpening (RCAS)" switch: the upscaler's own sharpening
+    // (FSR's RCAS, the TAA's) follows the switch, so it can be turned off in game.
+    const auto& settings = SpartanSettings::Get();
+    return settings.sharpen && settings.rcas;
 }
 
 bool TemporalUpscaler::SceneTaa() const {
@@ -1203,11 +1210,17 @@ void TemporalUpscaler::RecordTaa(vk::CommandBuffer cmdbuf, vk::ImageView color,
     cmdbuf.dispatch((out_width + 7) / 8, (out_height + 7) / 8, 1);
     const auto& settings = SpartanSettings::Get();
     float strength = std::clamp(settings.sharpness.load(), 0.0f, 2.0f);
-    bool sharpen = settings.sharpen;
+    const bool sharpen = SharpenOn();
+    {
+        static int logged_sharpen = -1;
+        if (logged_sharpen != int(sharpen)) {
+            logged_sharpen = int(sharpen);
+            std::printf("Sharpening: %s (the TAA's own, strength %d%%)\n", sharpen ? "on" : "off",
+                        settings.taa_sharpen.load());
+        }
+    }
     if (camera_motion.ViewProjectionCamera()) {
         // the 8-bit scene is softened by the history resampling: its own, menu-set strength.
-        // The menu's "Sharpening (RCAS)" switch turns it off too.
-        sharpen = sharpen && settings.rcas;
         strength = std::clamp(settings.taa_sharpen.load() / 100.0f, 0.0f, 2.0f);
     }
     if (sharpen && strength > 0.0f && !(params.pad & 0xffu)) {
@@ -1239,7 +1252,7 @@ void TemporalUpscaler::ExtraSharpen(vk::CommandBuffer cmdbuf, vk::Image target, 
                                     u32 h) {
     const auto& settings = SpartanSettings::Get();
     const float extra = std::clamp(settings.sharpness.load(), 0.0f, 2.0f) - 1.0f;
-    if (!settings.sharpen || extra <= 0.0f) {
+    if (!SharpenOn() || extra <= 0.0f) {
         return;
     }
     const auto device = instance.GetDevice();
@@ -1645,7 +1658,7 @@ void TemporalUpscaler::Run() {
         // RCAS strength 0..1 (menu, SPARTAN_FSR_SHARPNESS); jitter at 1:1 softens the image slightly.
         // AMD's RCAS ends at 1; ExtraSharpen adds the rest of the menu's 0..2.
         info.sharpness = std::min(SpartanSettings::Get().sharpness.load(), 1.0f);
-        info.enableSharpening = SpartanSettings::Get().sharpen ? VK_TRUE : VK_FALSE;
+        info.enableSharpening = SharpenOn() ? VK_TRUE : VK_FALSE;
         info.reset = reset ? VK_TRUE : VK_FALSE;
         info.frameId = frame_id++;
     
@@ -2420,7 +2433,7 @@ void TemporalUpscaler::RunScaled() {
     info.cameraVerticalFovRadians = camera_motion.VerticalFov();
     info.viewSpaceToMeters = 1.0f;
     info.sharpness = std::min(settings.sharpness.load(), 1.0f);
-    info.enableSharpening = settings.sharpen ? VK_TRUE : VK_FALSE;
+    info.enableSharpening = SharpenOn() ? VK_TRUE : VK_FALSE;
     info.reset = reset ? VK_TRUE : VK_FALSE;
     info.frameId = frame_id++;
 
@@ -2723,7 +2736,7 @@ bool TemporalUpscaler::RecordFsr4(vk::CommandBuffer cmdbuf, Fsr4Upscaler::Image 
         .far_plane = 3000.0f,
         .vertical_fov = camera_motion.VerticalFov(),
         .sharpness = std::min(settings.sharpness.load(), 1.0f),
-        .sharpen = settings.sharpen,
+        .sharpen = SharpenOn(),
         .reset = reset,
         .auto_exposure = settings.fsr4_auto_exposure,
         .color_format = context_hdr ? vk::Format::eR16G16B16A16Sfloat : ldr_format,

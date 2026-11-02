@@ -523,7 +523,10 @@ void ImageTab() {
     }
     const int iw = s.image_width, ih = s.image_height, ww = s.window_width, wh = s.window_height;
     const bool downscaling = iw > ww || ih > wh;
-    const bool rcas_blocked = s.rcas && !s.rcas_applied && s.upscaler != SpartanSettings::UpscalerTaa;
+    // With an upscaler the switch also controls the upscaler's own sharpening, so it stays usable; the
+    // strength slider belongs to the host RCAS pass, which needs the image and the window to match.
+    const bool rcas_host_blocked = s.rcas && !s.rcas_applied;
+    const bool rcas_blocked = rcas_host_blocked && s.upscaler == SpartanSettings::UpscalerOff;
     if (s.upscaler == SpartanSettings::UpscalerTaa) {
         DisabledText(s.temporal_applied ? "Temporal anti-aliasing is running."
                                         : "Temporal anti-aliasing is selected but not running (see last_run.log).");
@@ -573,7 +576,7 @@ void ImageTab() {
                  : rcas_blocked              ? "No effect: the game's image is smaller than the window."
                                              : "Sharpens the final image.");
         ImGui::EndDisabled();
-        ImGui::BeginDisabled(!s.rcas || rcas_blocked);
+        ImGui::BeginDisabled(!s.rcas || rcas_host_blocked);
         SliderRow("Sharpening strength", s.rcas_strength, 0, 100, "%d%%", "How strong the sharpening is.");
         ImGui::EndDisabled();
         ImGui::EndTable();
