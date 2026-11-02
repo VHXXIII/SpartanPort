@@ -1258,7 +1258,10 @@ void TemporalUpscaler::RecordTaa(vk::CommandBuffer cmdbuf, vk::ImageView color,
 void TemporalUpscaler::ExtraSharpen(vk::CommandBuffer cmdbuf, vk::Image target, bool ldr, u32 w,
                                     u32 h) {
     const auto& settings = SpartanSettings::Get();
-    const float extra = std::clamp(settings.sharpness.load(), 0.0f, 2.0f) - 1.0f;
+    // FSR's own RCAS ends at 1.0 and its effect is slight: above 75% the menu's strength adds a
+    // sharpening pass of ours after FSR (100% = strength 1.0), so the slider is visible.
+    const float menu = std::clamp((settings.rcas_strength.load() / 100.0f - 0.75f) / 0.25f, 0.0f, 1.0f);
+    const float extra = std::max(std::clamp(settings.sharpness.load(), 0.0f, 2.0f) - 1.0f, menu);
     if (!SharpenOn() || extra <= 0.0f) {
         return;
     }

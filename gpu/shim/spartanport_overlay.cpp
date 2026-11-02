@@ -581,7 +581,7 @@ void ImageTab() {
                                                                        s.upscaler != SpartanSettings::UpscalerTaa));
         ImGui::BeginDisabled(!strength_usable);
         SliderRow("Sharpening strength", s.rcas_strength, 0, 100, "%d%%",
-                  "How strong the sharpening is. With FSR it sets FSR's own sharpening too (75% is the default).");
+                  "How strong the sharpening is.");
         ImGui::EndDisabled();
         ImGui::EndTable();
     }
@@ -667,7 +667,9 @@ void ImageTab() {
         InfoRow("Game image", text);
         std::snprintf(text, sizeof(text), "%d x %d", ww, wh);
         InfoRow("Window", text);
-        InfoRow("Sharpening", s.rcas_applied ? "applied" : "not applied");
+        const bool upscaler_sharpens = s.rcas && s.upscaler != SpartanSettings::UpscalerOff;
+        InfoRow("Sharpening", s.rcas_applied ? "applied"
+                              : upscaler_sharpens ? "applied by the upscaler" : "not applied");
         ImGui::EndTable();
     }
 }

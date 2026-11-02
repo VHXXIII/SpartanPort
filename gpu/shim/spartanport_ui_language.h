@@ -13,6 +13,7 @@
 #include "ui_language/spartanport_ui_fr.h"
 #include "ui_language/spartanport_ui_id.h"
 #include "ui_language/spartanport_ui_it.h"
+#include "ui_language/spartanport_ui_cs.h"
 #include "ui_language/spartanport_ui_pl.h"
 #include "ui_language/spartanport_ui_pt.h"
 #include "ui_language/spartanport_ui_ru.h"
@@ -77,6 +78,7 @@ inline constexpr std::pair<std::string_view, const char*> ChineseText[] = {
     {"Deferred GPU readbacks", "延迟 GPU 回读"},
     {"Depth of field", "景深"},
     {"Motion blur", "动态模糊"},
+    {"applied by the upscaler", "由升频器应用"},
     {"The game's own motion blur on fast moving objects and the camera. Off removes it.", "游戏自带的动态模糊，作用于快速移动的物体和镜头。关闭后即可去除。"},
     {"Display", "显示"},
     {"Display mode", "显示模式"},
@@ -278,6 +280,7 @@ inline constexpr Language Languages[] = {
     Table("tr", "Türkçe", TurkishText),
     Table("id", "Bahasa Indonesia", IndonesianText),
     Table("ru", "Русский", RussianText),
+    Table("cs", "Čeština", CzechText),
     Table("zh", "中文", ChineseText),
 };
 inline constexpr int LanguageCount = int(sizeof(Languages) / sizeof(Languages[0]));
