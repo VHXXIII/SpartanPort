@@ -305,7 +305,10 @@ pass0_post, проходы модели 1..12 (за каждым `_post`, обн
 shadPS4 занимали по ядру. На свободной системе: «host copies» 1.6%, ожидание GPU ~41% — кадр
 упирается в GPU, так что async compute для FSR снова имеет смысл.
 
-## God of War III Remastered layout (TAA and FSR 3.1 Native AA)
+## God of War III Remastered layout (the port's TAA)
+
+The FSR 3.1 path (and its Native AA preset) is upstream's and is left untouched: the scene TAA below is
+active only when `upscaler=taa`, every hook is gated by `TemporalUpscaler::SceneTaa()`.
 
 The frame differs from the 5-target G-buffer layout above (found with `tools/spartanport_frame_map.py`
 on F11 captures).
@@ -330,7 +333,8 @@ on F11 captures).
   `SPARTAN_UPSCALER_COMPOSITE_PS`). The upscale runs before the next draw or dispatch, on the 8-bit
   sRGB scene colour (sampled through an sRGB view), before the HUD. The result is written back with
   a blit; the game's alpha is kept (`ldr_alpha.comp`).
-- MSAA is not used by the game; the half-resolution layer (instanced vegetation-like pass, own
+- Guest MSAA is turned off for the TAA (`vk_instance.cpp`), and the pipeline cache profile records that
+  mode so a cache of the other mode is rebuilt. The game itself does not rely on MSAA; the half-resolution layer (instanced vegetation-like pass, own
   depth) is not jittered.
 
 ### Jitter
@@ -352,7 +356,8 @@ skipping screen-space passes (3 or 4 indices) so a shifted full-screen quad leav
 - Texture detail: a negative LOD bias (`taa_lod / 100`) on the scene's material draws
   (`Rasterizer::BindResources`: scene depth address, no depth write, more than 4 indices, a colour
   target); the accumulation turns it into detail.
-- Sharpening: RCAS-style pass `taa_sharpen.comp` after the accumulation (`taa_sharpen`, up to 200%).
+- Sharpening: RCAS-style pass `taa_sharpen.comp` after the accumulation (`taa_sharpen`, up to 200%);
+  the menu's "Sharpening (RCAS)" switch turns it off (and FSR's own sharpening, `SharpenOn()`).
 - `pad` bits: 0-7 diagnostic view (4 = history debug view: red depth-rejected, green history lost,
   blue weight used), 8-15 A/B switches, 16-23 moving-object history loss in percent, 24 view-projection
   depth, 25 8-bit scene, 26-31 spatial smoothing.
