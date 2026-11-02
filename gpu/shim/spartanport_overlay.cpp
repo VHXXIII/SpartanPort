@@ -576,8 +576,12 @@ void ImageTab() {
                  : rcas_blocked              ? "No effect: the game's image is smaller than the window."
                                              : "Sharpens the final image.");
         ImGui::EndDisabled();
-        ImGui::BeginDisabled(!s.rcas || rcas_host_blocked);
-        SliderRow("Sharpening strength", s.rcas_strength, 0, 100, "%d%%", "How strong the sharpening is.");
+        // The strength also sets FSR's own sharpening (not the TAA's: it has its own slider above).
+        const bool strength_usable = s.rcas && (!rcas_host_blocked || (s.upscaler != SpartanSettings::UpscalerOff &&
+                                                                       s.upscaler != SpartanSettings::UpscalerTaa));
+        ImGui::BeginDisabled(!strength_usable);
+        SliderRow("Sharpening strength", s.rcas_strength, 0, 100, "%d%%",
+                  "How strong the sharpening is. With FSR it sets FSR's own sharpening too (75% is the default).");
         ImGui::EndDisabled();
         ImGui::EndTable();
     }

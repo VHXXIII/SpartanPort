@@ -76,6 +76,8 @@ public:
     [[nodiscard]] bool SceneTaa() const;
     /// The upscaler's own sharpening is on (launcher setting and the menu's RCAS switch).
     [[nodiscard]] bool SharpenOn() const;
+    /// FSR's own sharpness (0..1), from the menu's sharpening strength.
+    [[nodiscard]] float UpscalerSharpness() const;
 
     /// Draws into this depth image are jittered: the scene depth, and the full-size copy the
     /// transparent pass uses (same size as the scene depth, written by the game).

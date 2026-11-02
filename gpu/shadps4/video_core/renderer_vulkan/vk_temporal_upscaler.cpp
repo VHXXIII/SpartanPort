@@ -666,7 +666,7 @@ void TemporalUpscaler::RunLdr() {
         info.cameraFar = 3000.0f;
         info.cameraVerticalFovRadians = camera_motion.VerticalFov();
         info.viewSpaceToMeters = 1.0f;
-        info.sharpness = std::min(SpartanSettings::Get().sharpness.load(), 1.0f);
+        info.sharpness = UpscalerSharpness();
         info.enableSharpening = SharpenOn() ? VK_TRUE : VK_FALSE;
         info.reset = reset ? VK_TRUE : VK_FALSE;
         info.frameId = frame_id++;
@@ -732,6 +732,13 @@ void TemporalUpscaler::OnDispatch(u64 cs_hash) {
         return;
     }
     Run();
+}
+
+float TemporalUpscaler::UpscalerSharpness() const {
+    // FSR's own sharpening (0..1) from the menu's strength slider: 75% (its default) is FSR's usual
+    // 0.3, 100% the strongest; below 75% it fades to 0. SPARTAN_FSR_SHARPNESS no longer sets it.
+    const float strength = std::clamp(SpartanSettings::Get().rcas_strength.load() / 100.0f, 0.0f, 1.0f);
+    return strength <= 0.75f ? strength / 0.75f * 0.3f : 0.3f + (strength - 0.75f) / 0.25f * 0.7f;
 }
 
 bool TemporalUpscaler::SharpenOn() const {
@@ -1657,7 +1664,7 @@ void TemporalUpscaler::Run() {
         info.viewSpaceToMeters = 1.0f;
         // RCAS strength 0..1 (menu, SPARTAN_FSR_SHARPNESS); jitter at 1:1 softens the image slightly.
         // AMD's RCAS ends at 1; ExtraSharpen adds the rest of the menu's 0..2.
-        info.sharpness = std::min(SpartanSettings::Get().sharpness.load(), 1.0f);
+        info.sharpness = UpscalerSharpness();
         info.enableSharpening = SharpenOn() ? VK_TRUE : VK_FALSE;
         info.reset = reset ? VK_TRUE : VK_FALSE;
         info.frameId = frame_id++;
@@ -2432,7 +2439,7 @@ void TemporalUpscaler::RunScaled() {
     info.cameraFar = 3000.0f;
     info.cameraVerticalFovRadians = camera_motion.VerticalFov();
     info.viewSpaceToMeters = 1.0f;
-    info.sharpness = std::min(settings.sharpness.load(), 1.0f);
+    info.sharpness = UpscalerSharpness();
     info.enableSharpening = SharpenOn() ? VK_TRUE : VK_FALSE;
     info.reset = reset ? VK_TRUE : VK_FALSE;
     info.frameId = frame_id++;
@@ -2735,7 +2742,7 @@ bool TemporalUpscaler::RecordFsr4(vk::CommandBuffer cmdbuf, Fsr4Upscaler::Image 
         .near_plane = camera_motion.Near(),
         .far_plane = 3000.0f,
         .vertical_fov = camera_motion.VerticalFov(),
-        .sharpness = std::min(settings.sharpness.load(), 1.0f),
+        .sharpness = UpscalerSharpness(),
         .sharpen = SharpenOn(),
         .reset = reset,
         .auto_exposure = settings.fsr4_auto_exposure,
