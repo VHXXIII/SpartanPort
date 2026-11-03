@@ -2173,7 +2173,7 @@ fn the_files_buttons_share_one_row_at_its_end() {
     // R93: "Port folder", "spartanport.ini" and "Clear shader cache" on one line, ending where
     // every row's control ends (starting there right to left), each label on one line.
     for lang in [
-        "en", "pt", "es", "fr", "de", "it", "pl", "ru", "tr", "ar", "zh", "ja", "ko", "id",
+        "en", "pt", "es", "fr", "de", "it", "pl", "cs", "ru", "tr", "ar", "zh", "ja", "ko", "id",
     ] {
         let dir = tempfile::tempdir().unwrap();
         let mut state = state(dir.path());

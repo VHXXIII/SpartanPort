@@ -226,6 +226,7 @@ pub static UI_LANGUAGES: &[Choice] = &[
     c("de", "Deutsch"),
     c("it", "Italiano"),
     c("pl", "Polski"),
+    c("cs", "Čeština"),
     c("tr", "Türkçe"),
     c("zh", "简体中文"),
     c("ja", "日本語"),
