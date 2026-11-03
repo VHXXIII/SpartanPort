@@ -31,8 +31,24 @@ inline int ParseAudioChannels(std::string_view value) {
 }
 inline constexpr int MasterVolumeMin = 0, MasterVolumeMax = 200, MasterVolumeDefault = 100;
 
+// UpscalerFsr3Ui (appended: saved numbers keep their meaning) is FSR 3.1 with the game at its own
+// 1920x1080 targets, so the HUD, text and loading screens are not drawn small and stretched.
 enum Upscaler : int { UpscalerOff = 0, UpscalerFsr3 = 1, UpscalerFsr4 = 2, UpscalerFsr411 = 3,
-                      UpscalerTaa = 4, UpscalerCount };
+                      UpscalerTaa = 4, UpscalerFsr3Ui = 5, UpscalerCount };
+/// FSR 3.1, either variant.
+inline bool IsFsr3(int upscaler) {
+    return upscaler == UpscalerFsr3 || upscaler == UpscalerFsr3Ui;
+}
+/// The upscalers that need the game's own 1920x1080 targets (no resolution patch): a switch between
+/// them and the patched ones needs a restart.
+inline bool NeedsLivePath(int upscaler) {
+    return upscaler == UpscalerTaa || upscaler == UpscalerFsr3Ui;
+}
+/// The port's own sharpening (the RCAS switch and strength, the extra pass): the TAA and the
+/// native-HUD FSR 3.1. The other upscalers keep the upstream behaviour (`sharpen` and `sharpness`).
+inline bool OwnSharpening(int upscaler) {
+    return upscaler == UpscalerTaa || upscaler == UpscalerFsr3Ui;
+}
 /// FSR 4 v07 or FSR 4.1.1: the same inputs, settings and placement in the frame.
 inline bool IsFsr4(int upscaler) {
     return upscaler == UpscalerFsr4 || upscaler == UpscalerFsr411;

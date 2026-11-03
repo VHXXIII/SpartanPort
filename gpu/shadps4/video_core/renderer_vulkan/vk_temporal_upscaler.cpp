@@ -238,7 +238,7 @@ TemporalUpscaler::~TemporalUpscaler() {
 bool TemporalUpscaler::Active() const {
     // Toggle 1 << 24 switches it off at run time (A/B); history restarts after.
     return enabled && !failed &&
-           (SpartanSettings::Get().upscaler == SpartanSettings::UpscalerFsr3 ||
+           (SpartanSettings::IsFsr3(SpartanSettings::Get().upscaler) ||
             SpartanSettings::IsFsr4(SpartanSettings::Get().upscaler) ||
             SpartanSettings::Get().upscaler == SpartanSettings::UpscalerTaa) &&
            !SpartanToggle::Disabled(1u << 24);
@@ -735,6 +735,9 @@ void TemporalUpscaler::OnDispatch(u64 cs_hash) {
 }
 
 float TemporalUpscaler::UpscalerSharpness() const {
+    if (!SpartanSettings::OwnSharpening(SpartanSettings::Get().upscaler)) {
+        return std::min(SpartanSettings::Get().sharpness.load(), 1.0f); // upstream
+    }
     // FSR's own sharpening (0..1) from the menu's strength slider: 75% (its default) is FSR's usual
     // 0.3, 100% the strongest; below 75% it fades to 0. SPARTAN_FSR_SHARPNESS no longer sets it.
     const float strength = std::clamp(SpartanSettings::Get().rcas_strength.load() / 100.0f, 0.0f, 1.0f);
@@ -745,6 +748,9 @@ bool TemporalUpscaler::SharpenOn() const {
     // The launcher's sharpen and the menu's "Sharpening (RCAS)" switch: the upscaler's own sharpening
     // (FSR's RCAS, the TAA's) follows the switch, so it can be turned off in game.
     const auto& settings = SpartanSettings::Get();
+    if (!SpartanSettings::OwnSharpening(settings.upscaler)) {
+        return settings.sharpen; // upstream: the switch belongs to the host pass only
+    }
     return settings.sharpen && settings.rcas;
 }
 
@@ -1260,7 +1266,8 @@ void TemporalUpscaler::ExtraSharpen(vk::CommandBuffer cmdbuf, vk::Image target, 
     const auto& settings = SpartanSettings::Get();
     // FSR's own RCAS ends at 1.0 and its effect is slight: above 75% the menu's strength adds a
     // sharpening pass of ours after FSR (100% = strength 1.0), so the slider is visible.
-    const float menu = std::clamp((settings.rcas_strength.load() / 100.0f - 0.75f) / 0.25f, 0.0f, 1.0f);
+    const bool own = SpartanSettings::OwnSharpening(settings.upscaler);
+    const float menu = own ? std::clamp((settings.rcas_strength.load() / 100.0f - 0.75f) / 0.25f, 0.0f, 1.0f) : 0.0f;
     const float extra = std::max(std::clamp(settings.sharpness.load(), 0.0f, 2.0f) - 1.0f, menu);
     {
         // One log line per change, so a log shows what the upscaler's sharpening did.
@@ -1618,7 +1625,7 @@ void TemporalUpscaler::Run() {
 
     mask_ready = mask_ready || RecordReactive(input_color_view);
     bool has_reactive = mask_ready;
-    if (SpartanSettings::Get().upscaler == SpartanSettings::UpscalerFsr3 &&
+    if (SpartanSettings::IsFsr3(SpartanSettings::Get().upscaler) &&
         input_depth == depth.GetImage()) {
         has_reactive = RecordStencilReactive(cmdbuf, depth, depth_format, w, h) || has_reactive;
     }

@@ -43,13 +43,15 @@ model in one gameplay process, including output captures and camera movement.
 `out/taa-launcher-validation.log` checks actual GTK controls and saved settings.
 TAA has not yet been tested on the tester's GTX 1060.
 
-## Native AA at 1080p: no 1918x1078 patch (2026-11-03)
+## FSR 3.1 with native HUD and text (2026-11-03)
 
-The launcher no longer patches the game's render size for FSR with the Native AA preset at a 1920x1080
-output: a fixed 1918x1078 session drew all of the game (HUD, text, loading screens) at that size and
-the display stretched it to 1920x1080, which softened everything the upscaler does not touch. The game
-now keeps its own 1920x1080 targets (the live path, as TAA does). Other presets and outputs still use
-the resolution patch.
+Two FSR 3.1 choices. **FSR 3.1** is upstream's: with the Native AA preset the launcher patches the
+game to 1918x1078, so the HUD, text and loading screens are drawn at that size and stretched to
+1920x1080. **FSR 3.1 (native HUD and text)** (`upscaler=fsr3ui`) does not patch the render size: the
+game keeps its own 1920x1080 targets (the live path, as the TAA does) and only the scene is upscaled.
+Only this variant and the TAA use the port's own sharpening (the Sharpening (RCAS) switch and
+strength, and the extra pass above FSR's maximum); FSR 3.1, FSR 4 and FSR 4.1 keep upstream's
+(`sharpen`, `sharpness`). Switching between a patched and a live-path upscaler needs a restart.
 
 ## Startup patch is the default again for outputs other than 1080p (2026-10-02)
 

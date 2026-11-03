@@ -412,7 +412,7 @@ bool GraphicsNeedRestart() {
            // The launcher patches the render size of the preset (or none without an upscaler).
            v.preset != v.startup_preset ||
            (v.upscaler == UpscalerOff) != (v.startup_upscaler == UpscalerOff) ||
-           (v.upscaler == UpscalerTaa) != (v.startup_upscaler == UpscalerTaa);
+           NeedsLivePath(v.upscaler) != NeedsLivePath(v.startup_upscaler);
 }
 
 void ConfigureUpscalerSupport(bool fsr4, bool fsr411, const char* fsr411_problem) {
@@ -449,7 +449,7 @@ bool ResolutionNeedsRestart() {
     return FixedRenderSession() &&
         (v.preset != v.startup_preset || v.output_res != v.startup_output_res ||
          (v.upscaler == UpscalerOff) != (v.startup_upscaler == UpscalerOff) ||
-         (v.upscaler == UpscalerTaa) != (v.startup_upscaler == UpscalerTaa));
+         NeedsLivePath(v.upscaler) != NeedsLivePath(v.startup_upscaler));
 }
 
 void Save() {
@@ -561,7 +561,7 @@ const char* PresetName(int preset) {
 }
 
 const char* UpscalerName(int upscaler) {
-    static constexpr const char* names[UpscalerCount] = {"off", "fsr3", "fsr4", "fsr411", "taa"};
+    static constexpr const char* names[UpscalerCount] = {"off", "fsr3", "fsr4", "fsr411", "taa", "fsr3ui"};
     return names[std::clamp(upscaler, 0, UpscalerCount - 1)];
 }
 
@@ -673,9 +673,9 @@ extern "C" uint64_t spartanportgpu_native_setting(unsigned function) {
         };
         // The launcher's order (options.rs UPSCALERS, PRESETS).
 #ifdef _WIN32
-        const std::vector<int> upscalers{UpscalerOff, UpscalerFsr3, UpscalerFsr4, UpscalerFsr411, UpscalerTaa};
+        const std::vector<int> upscalers{UpscalerOff, UpscalerFsr3, UpscalerFsr3Ui, UpscalerFsr4, UpscalerFsr411, UpscalerTaa};
 #else
-        const std::vector<int> upscalers{UpscalerOff, UpscalerFsr3, UpscalerFsr4, UpscalerTaa};
+        const std::vector<int> upscalers{UpscalerOff, UpscalerFsr3, UpscalerFsr3Ui, UpscalerFsr4, UpscalerTaa};
 #endif
         const std::vector<int> presets{NativeAA, UltraQuality, Quality, Balanced, Performance, UltraPerformance};
         if (direction) {
@@ -687,6 +687,7 @@ extern "C" uint64_t spartanportgpu_native_setting(unsigned function) {
         if (row == 0) {
             const int u = v.upscaler;
             value = u == UpscalerOff ? (pt ? "Desligado" : "Off") : u == UpscalerFsr3 ? "FSR 3.1"
+                  : u == UpscalerFsr3Ui ? "FSR 3.1 UI"
                   : u == UpscalerFsr4 ? "FSR 4" : u == UpscalerFsr411 ? "FSR 4.1" : u == UpscalerTaa ? "TAA" : UpscalerName(u);
             if ((u == UpscalerFsr4 && !v.fsr4_supported) || (u == UpscalerFsr411 && !v.fsr411_supported)) value += pt ? " (indisponível)" : " (unavailable)";
         } else {

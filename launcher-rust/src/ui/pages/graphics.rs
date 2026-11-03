@@ -111,7 +111,11 @@ pub fn view(state: &State) -> Element<'_, Message> {
             state.rtl,
             &tr(lang, "Upscaler"),
             select("upscaler", UPSCALERS, &ini("upscaler"), lang),
-            Some(&hint("FSR 4.1 requires AMD Adrenalin 26.10.1 or newer. The log shows the active provider; fallback to FSR 3.1 is not FSR 4.1.")),
+            Some(&hint(if ini("upscaler") == "fsr3ui" {
+                "FSR 3.1 (native HUD and text): the game keeps its own 1920x1080 targets, so the HUD, text and loading screens are not stretched (FSR 3.1 draws everything at 1918x1078 with Native AA). Has the port's own sharpening in the in-game menu. Experimental."
+            } else {
+                "FSR 4.1 requires AMD Adrenalin 26.10.1 or newer. The log shows the active provider; fallback to FSR 3.1 is not FSR 4.1."
+            })),
         ),
         row(
             state.rtl,

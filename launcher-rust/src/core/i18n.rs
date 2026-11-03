@@ -601,6 +601,22 @@ static UI_EXTRA: &[(&str, &[(&str, &str)])] = &[
             ("cs", "Tato verze je starší než nainstalovaná."),
         ],
     ),
+    (
+        "FSR 3.1 (native HUD and text)",
+        &[
+            ("pt", "FSR 3.1 (HUD e texto nativos)"),
+            ("es", "FSR 3.1 (HUD y texto nativos)"),
+            ("cs", "FSR 3.1 (nativní HUD a text)"),
+        ],
+    ),
+    (
+        "FSR 3.1 (native HUD and text): the game keeps its own 1920x1080 targets, so the HUD, text and loading screens are not stretched (FSR 3.1 draws everything at 1918x1078 with Native AA). Has the port's own sharpening in the in-game menu. Experimental.",
+        &[
+            ("pt", "FSR 3.1 (HUD e texto nativos): o jogo mantém seus próprios alvos de 1920x1080, então a HUD, o texto e as telas de carregamento não são esticados (o FSR 3.1 desenha tudo em 1918x1078 com Native AA). Tem a nitidez própria do port no menu do jogo. Experimental."),
+            ("es", "FSR 3.1 (HUD y texto nativos): el juego mantiene sus propios objetivos de 1920x1080, así que el HUD, el texto y las pantallas de carga no se estiran (el FSR 3.1 dibuja todo a 1918x1078 con Native AA). Tiene el enfoque propio del port en el menú del juego. Experimental."),
+            ("cs", "FSR 3.1 (nativní HUD a text): hra si ponechá vlastní cíle 1920×1080, takže HUD, text a loadingy se neroztahují (FSR 3.1 s Native AA kreslí všechno v 1918×1078). V herním menu má vlastní ostření portu. Experimentální."),
+        ],
+    ),
 ];
 
 fn ui_extra(lang: &str, en: &str) -> Option<&'static str> {

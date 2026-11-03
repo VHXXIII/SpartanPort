@@ -372,6 +372,7 @@ void SliderRow(const char* label, std::atomic<int>& value, int lo, int hi, const
 const char* UpscalerLabel(int upscaler) {
     switch (upscaler) {
     case SpartanSettings::UpscalerFsr3: return "FSR 3.1";
+    case SpartanSettings::UpscalerFsr3Ui: return "FSR 3.1 (native HUD and text)";
     case SpartanSettings::UpscalerFsr4: return "FSR 4";
     case SpartanSettings::UpscalerFsr411: return "FSR 4.1";
     case SpartanSettings::UpscalerTaa: return "TAA";
@@ -525,8 +526,11 @@ void ImageTab() {
     const bool downscaling = iw > ww || ih > wh;
     // With an upscaler the switch also controls the upscaler's own sharpening, so it stays usable; the
     // strength slider belongs to the host RCAS pass, which needs the image and the window to match.
+    // The port's own sharpening (TAA, FSR 3.1 with native HUD) follows the switch; the other upscalers
+    // keep the upstream behaviour: the switch and the slider belong to the host pass only.
+    const bool own_sharpening = SpartanSettings::OwnSharpening(s.upscaler);
     const bool rcas_host_blocked = s.rcas && !s.rcas_applied;
-    const bool rcas_blocked = rcas_host_blocked && s.upscaler == SpartanSettings::UpscalerOff;
+    const bool rcas_blocked = rcas_host_blocked && !own_sharpening;
     if (s.upscaler == SpartanSettings::UpscalerTaa) {
         DisabledText(s.temporal_applied ? "Temporal anti-aliasing is running."
                                         : "Temporal anti-aliasing is selected but not running (see last_run.log).");
@@ -577,8 +581,7 @@ void ImageTab() {
                                              : "Sharpens the final image.");
         ImGui::EndDisabled();
         // The strength also sets FSR's own sharpening (not the TAA's: it has its own slider above).
-        const bool strength_usable = s.rcas && (!rcas_host_blocked || (s.upscaler != SpartanSettings::UpscalerOff &&
-                                                                       s.upscaler != SpartanSettings::UpscalerTaa));
+        const bool strength_usable = s.rcas && (!rcas_host_blocked || s.upscaler == SpartanSettings::UpscalerFsr3Ui);
         ImGui::BeginDisabled(!strength_usable);
         SliderRow("Sharpening strength", s.rcas_strength, 0, 100, "%d%%",
                   "How strong the sharpening is.");
@@ -590,17 +593,21 @@ void ImageTab() {
         // The launcher's choices and order (options.rs UPSCALERS, PRESETS); the same values as the
         // Display menu's rows.
 #ifdef _WIN32
-        static const char* const upscaler_labels[] = {"Off", "FSR 3.1", "FSR 4", "FSR 4.1", "TAA"};
-        static const int upscaler_values[] = {SpartanSettings::UpscalerOff, SpartanSettings::UpscalerFsr3, SpartanSettings::UpscalerFsr4,
+        static const char* const upscaler_labels[] = {"Off", "FSR 3.1", "FSR 3.1 (native HUD)", "FSR 4", "FSR 4.1", "TAA"};
+        static const int upscaler_values[] = {SpartanSettings::UpscalerOff, SpartanSettings::UpscalerFsr3,
+                                              SpartanSettings::UpscalerFsr3Ui, SpartanSettings::UpscalerFsr4,
                                               SpartanSettings::UpscalerFsr411,
                                               SpartanSettings::UpscalerTaa};
 #else
-        static const char* const upscaler_labels[] = {"Off", "FSR 3.1", "FSR 4", "TAA"};
-        static const int upscaler_values[] = {SpartanSettings::UpscalerOff, SpartanSettings::UpscalerFsr3, SpartanSettings::UpscalerFsr4,
+        static const char* const upscaler_labels[] = {"Off", "FSR 3.1", "FSR 3.1 (native HUD)", "FSR 4", "TAA"};
+        static const int upscaler_values[] = {SpartanSettings::UpscalerOff, SpartanSettings::UpscalerFsr3,
+                                              SpartanSettings::UpscalerFsr3Ui, SpartanSettings::UpscalerFsr4,
                                               SpartanSettings::UpscalerTaa};
 #endif
         ChoiceRow("Upscaler", s.upscaler, upscaler_labels, upscaler_values, int(std::size(upscaler_values)),
-                  "FSR 4.1 needs an AMD Radeon with Adrenalin 26.10.1 or newer.");
+                  "FSR 3.1 (native HUD) keeps the game at 1920x1080 so the HUD, text and loading screens are "
+                  "not stretched, and has the port's own sharpening. FSR 4.1 needs an AMD Radeon with "
+                  "Adrenalin 26.10.1 or newer.");
         // Each preset's render size at the chosen Render resolution, before the restart too.
         static const int preset_values[] = {SpartanSettings::NativeAA, SpartanSettings::UltraQuality,
                                             SpartanSettings::Quality, SpartanSettings::Balanced,
@@ -667,7 +674,7 @@ void ImageTab() {
         InfoRow("Game image", text);
         std::snprintf(text, sizeof(text), "%d x %d", ww, wh);
         InfoRow("Window", text);
-        const bool upscaler_sharpens = s.rcas && s.upscaler != SpartanSettings::UpscalerOff;
+        const bool upscaler_sharpens = s.rcas && own_sharpening;
         InfoRow("Sharpening", s.rcas_applied ? "applied"
                               : upscaler_sharpens ? "applied by the upscaler" : "not applied");
         ImGui::EndTable();
@@ -827,7 +834,7 @@ int RestartChanges() {
            (s.deferred_readback != s.startup_deferred_readback) + (s.stale_readback != s.startup_stale_readback) +
            (s.anisotropy != s.startup_anisotropy) + (s.preset != s.startup_preset) +
            ((s.upscaler == SpartanSettings::UpscalerOff) != (s.startup_upscaler == SpartanSettings::UpscalerOff) ||
-            (s.upscaler == SpartanSettings::UpscalerTaa) != (s.startup_upscaler == SpartanSettings::UpscalerTaa));
+            SpartanSettings::NeedsLivePath(s.upscaler) != SpartanSettings::NeedsLivePath(s.startup_upscaler));
 }
 
 // The menu's tabs: words in the title face, the open one in full colour with a red line under it,

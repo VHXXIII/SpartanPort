@@ -124,6 +124,7 @@ pub static GLYPH_STYLES: &[Choice] = &[
 pub static UPSCALERS: &[Choice] = &[
     cr("off", "Off", "Выключен"),
     cr("fsr3", "FSR 3.1 (every GPU)", "FSR 3.1 (любая видеокарта)"),
+    c("fsr3ui", "FSR 3.1 (native HUD and text)"),
     c("fsr4", "FSR 4 (AMD Radeon, Intel Arc)"),
     #[cfg(windows)]
     c("fsr411", "FSR 4.1 (AMD driver)"),
