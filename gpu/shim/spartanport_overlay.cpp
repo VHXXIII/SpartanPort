@@ -572,6 +572,19 @@ void ImageTab() {
             ImGui::EndTable();
         }
     }
+    if (s.upscaler == SpartanSettings::UpscalerFsr3Ui) {
+        Separator("FSR 3.1 look (God of War III)");
+        if (BeginRows("##fsr_look")) {
+            SliderRow("Texture detail", s.fsr_lod, 0, 150, "%d%%",
+                      "Sharper textures (a negative mip bias, in percent of one level) on top of FSR's own: "
+                      "the accumulation turns the extra detail into a clean picture. Higher: more detail, "
+                      "more shimmer. Default 0%.");
+            SliderRow("Moving objects", s.fsr_objects, 0, 100, "%d%%",
+                      "How much FSR distrusts its history on characters and objects. Higher: less ghosting "
+                      "behind them, rougher edges. Lower: smoother but more trails. Default 100%.");
+            ImGui::EndTable();
+        }
+    }
     Separator("Sharpening");
     if (BeginRows("##scaling")) {
         ImGui::BeginDisabled(rcas_blocked);

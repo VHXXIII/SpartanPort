@@ -489,10 +489,14 @@ bool TemporalUpscaler::RecordStencilReactive(vk::CommandBuffer cmdbuf, VideoCore
     // motion vectors: a reactive mask keeps FSR from ghosting them. SPARTAN_STENCIL_REACTIVE
     // sets the reactivity (0 turns the mask off), toggle 1 << 28 switches it off at run time.
     // The depth is in General layout (both callers transit it for the motion pass).
-    static const float stencil_value = [] {
+    static const float env_value = [] {
         const char* env = std::getenv("SPARTAN_STENCIL_REACTIVE");
         return env && env[0] ? std::clamp(float(std::atof(env)), 0.0f, 1.0f) : 1.0f;
     }();
+    // FSR 3.1 with native HUD and text: the menu's "Moving objects" sets it live.
+    const float stencil_value = SpartanSettings::Get().upscaler == SpartanSettings::UpscalerFsr3Ui
+        ? std::clamp(float(SpartanSettings::Get().fsr_objects.load()) / 100.0f, 0.0f, 1.0f)
+        : env_value;
     if (stencil_value <= 0.0f || SpartanToggle::Disabled(1u << 28) ||
         !(depth.info.props.has_stencil || depth_format == vk::Format::eD32SfloatS8Uint)) {
         return false;
@@ -1964,7 +1968,11 @@ float TemporalUpscaler::SceneMipBias() const {
     if (!Active() || SpartanSettings::Get().upscaler == SpartanSettings::UpscalerTaa) return 0.0f;
     const float render = float(SpartanSettings::Get().active_render_width.load());
     const float output = float(Scaled() ? target_width : 1920u);
-    return render > 0.0f && render < output ? std::log2(render / output) : 0.0f;
+    float bias = render > 0.0f && render < output ? std::log2(render / output) : 0.0f;
+    if (SpartanSettings::Get().upscaler == SpartanSettings::UpscalerFsr3Ui) {
+        bias -= float(SpartanSettings::Get().fsr_lod.load()) / 100.0f; // the menu's texture detail
+    }
+    return bias;
 }
 
 bool TemporalUpscaler::Scaled() const {

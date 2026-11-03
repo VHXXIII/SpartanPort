@@ -52,6 +52,9 @@ game keeps its own 1920x1080 targets (the live path, as the TAA does) and only t
 Only this variant and the TAA use the port's own sharpening (the Sharpening (RCAS) switch and
 strength, and the extra pass above FSR's maximum); FSR 3.1, FSR 4 and FSR 4.1 keep upstream's
 (`sharpen`, `sharpness`). Switching between a patched and a live-path upscaler needs a restart.
+The Insert menu (Image tab) has an "FSR 3.1 look" section for it: Texture detail (`fsr_lod`, a negative
+mip bias in percent of a level, default 0) and Moving objects (`fsr_objects`, the strength of the
+stencil reactive mask on characters and objects, default 100 = upstream's), both live.
 
 ## Startup patch is the default again for outputs other than 1080p (2026-10-02)
 

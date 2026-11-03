@@ -149,6 +149,11 @@ struct Values {
     std::atomic<int> taa_lod{75};
     /// Edge smoothing of the pixels whose history was refused (moving characters): percent.
     std::atomic<int> taa_spatial{70};
+    /// FSR 3.1 with native HUD and text (UpscalerFsr3Ui), percent, live: fsr_lod is the texture detail
+    /// (a negative mip bias of fsr_lod / 100 levels on top of FSR's own); fsr_objects the reactive
+    /// strength of characters and objects (the stencil mask: 100 is upstream's, lower is sharper but
+    /// ghosts more).
+    std::atomic<int> fsr_lod{0}, fsr_objects{100};
     /// TAA debug view (not saved): red = history rejected by depth, green = lost to colour change /
     /// moving-object detection, blue = history weight used.
     std::atomic<bool> taa_debug{false};
