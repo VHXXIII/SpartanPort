@@ -1262,6 +1262,20 @@ void TemporalUpscaler::ExtraSharpen(vk::CommandBuffer cmdbuf, vk::Image target, 
     // sharpening pass of ours after FSR (100% = strength 1.0), so the slider is visible.
     const float menu = std::clamp((settings.rcas_strength.load() / 100.0f - 0.75f) / 0.25f, 0.0f, 1.0f);
     const float extra = std::max(std::clamp(settings.sharpness.load(), 0.0f, 2.0f) - 1.0f, menu);
+    {
+        // One log line per change, so a log shows what the upscaler's sharpening did.
+        static bool last_on = false;
+        static float last_rcas = -1.0f, last_extra = -1.0f;
+        const bool on = SharpenOn();
+        const float rcas = UpscalerSharpness();
+        if (on != last_on || rcas != last_rcas || extra != last_extra) {
+            last_on = on;
+            last_rcas = rcas;
+            last_extra = extra;
+            std::printf("Sharpening (upscaler): %s, FSR RCAS %.2f, extra pass %.2f (menu strength %d%%)\n",
+                        on ? "on" : "off", rcas, on ? extra : 0.0f, settings.rcas_strength.load());
+        }
+    }
     if (!SharpenOn() || extra <= 0.0f) {
         return;
     }
