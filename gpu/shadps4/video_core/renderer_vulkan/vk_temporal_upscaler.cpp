@@ -1975,6 +1975,11 @@ float TemporalUpscaler::SceneMipBias() const {
     return bias;
 }
 
+bool TemporalUpscaler::FsrSceneTextures() const {
+    return Active() && SpartanSettings::Get().upscaler == SpartanSettings::UpscalerFsr3Ui &&
+           !done_this_frame;
+}
+
 bool TemporalUpscaler::Scaled() const {
     return scaled_session || target_width != 1920 || target_height != 1080;
 }

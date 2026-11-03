@@ -94,6 +94,9 @@ public:
     /// spartanport: LOD bias for scene materials, log2(render / output) while a reduced scene is
     /// upscaled (0 at native size, for TAA and without an upscaler).
     [[nodiscard]] float SceneMipBias() const;
+    /// FSR 3.1 with native HUD and text, before this frame's upscale: the scene's material draws take the
+    /// menu's texture detail (the TAA's own detection needs its camera; FSR has the depth pre-pass).
+    [[nodiscard]] bool FsrSceneTextures() const;
     /// spartanport: the state RedirectColor/RedirectDepth/RasterScaling depend on, for memoizing a
     /// draw's render state (Rasterizer::BeginRendering).
     [[nodiscard]] u64 RedirectState() const noexcept {
