@@ -43,6 +43,14 @@ model in one gameplay process, including output captures and camera movement.
 `out/taa-launcher-validation.log` checks actual GTK controls and saved settings.
 TAA has not yet been tested on the tester's GTX 1060.
 
+## Native AA at 1080p: no 1918x1078 patch (2026-11-03)
+
+The launcher no longer patches the game's render size for FSR with the Native AA preset at a 1920x1080
+output: a fixed 1918x1078 session drew all of the game (HUD, text, loading screens) at that size and
+the display stretched it to 1920x1080, which softened everything the upscaler does not touch. The game
+now keeps its own 1920x1080 targets (the live path, as TAA does). Other presets and outputs still use
+the resolution patch.
+
 ## Startup patch is the default again for outputs other than 1080p (2026-10-02)
 
 The live path below made the Steam Deck and a GTX 1060 + 4-core Haswell drop to 7–8 FPS

@@ -477,8 +477,14 @@ pub fn upscaler_render_size(
             .map_or("native", String::as_str),
     )
     .unwrap_or((1920, 1080));
-    let (width, height) =
-        upscale_render_size(&pick("SPARTAN_UPSCALE_PRESET", "preset", "0"), output)?;
+    let preset = pick("SPARTAN_UPSCALE_PRESET", "preset", "0");
+    if preset.trim() == "0" && output == (1920, 1080) {
+        // Native AA at the game's own 1080p: no resolution patch. The game keeps its 1920x1080
+        // targets (the live path: FSR on the scene color, HUD, text and loading screens untouched)
+        // instead of drawing everything at 1918x1078 and stretching it to the screen.
+        return None;
+    }
+    let (width, height) = upscale_render_size(&preset, output)?;
     Some((width, height, output))
 }
 
@@ -1318,6 +1324,14 @@ output_res=1280x720
         let mut off = on.clone();
         off.insert("SPARTAN_UPSCALER".into(), "off".into());
         assert_eq!(upscaler_render_size(&ini, &off), None);
+        // Native AA at 1080p output keeps the game's own targets (no 1918x1078 patch).
+        fs::write(&ini, "upscaler=fsr3\npreset=0\nrender_resolution=native\n").unwrap();
+        assert_eq!(upscaler_render_size(&ini, &on), None);
+        fs::write(&ini, "upscaler=fsr3\npreset=0\nrender_resolution=1440p\n").unwrap();
+        assert_eq!(
+            upscaler_render_size(&ini, &on),
+            Some((2558, 1438, (2560, 1440)))
+        );
         fs::write(
             &ini,
             "upscaler=fsr3
