@@ -337,6 +337,8 @@ void Rasterizer::PrepareRenderState(const GraphicsPipeline* pipeline) {
             const auto& depth = texture_cache.GetImage(db_desc.first);
             if (depth.info.size.width > depth.info.size.height) {
                 prepass_depth = db_desc.first;
+                // the material pass draws with this depth (FSR 3.1 native HUD's texture detail)
+                scene_depth_address = regs.depth_buffer.DepthAddress();
             }
         }
     }
