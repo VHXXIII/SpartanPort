@@ -680,6 +680,13 @@ static UI_EXTRA: &[(&str, &[(&str, &str)])] = &[
             ("cs", "FSR 3.1 (nativní HUD a text): hra si ponechá vlastní cíle 1920×1080, takže HUD, text a loadingy se neroztahují (FSR 3.1 s Native AA kreslí všechno v 1918×1078). V herním menu má vlastní ostření portu. Experimentální."),
         ],
     ),
+    (
+        "XeSS (Intel): anti-aliasing at the game's own resolution, in place of the TAA's accumulation. Needs libxess.dll next to the game (the Windows package includes it). Texture detail and sharpening are in the in-game menu. Experimental.",
+        &[
+            ("pt", "XeSS (Intel): anti-aliasing na resolução própria do jogo, no lugar da acumulação do TAA. Precisa do libxess.dll ao lado do jogo (o pacote do Windows já o inclui). O detalhe das texturas e o aumento de nitidez ficam no menu do jogo. Experimental."),
+            ("cs", "XeSS (Intel): vyhlazování hran ve vlastním rozlišení hry místo akumulace TAA. Potřebuje libxess.dll vedle hry (balíček pro Windows ho obsahuje). Detail textur a doostření jsou v herním menu. Experimentální."),
+        ],
+    ),
 ];
 
 fn ui_extra(lang: &str, en: &str) -> Option<&'static str> {
