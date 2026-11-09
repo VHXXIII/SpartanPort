@@ -158,9 +158,14 @@ struct Values {
     std::atomic<int> taa_static{99}, taa_moving{55}, taa_tolerance{175}, taa_objects{55}, taa_sharpen{130};
     /// Texture detail of the scene's materials: a negative mip bias of taa_lod / 100 levels, which the
     /// accumulation (jitter) turns into detail instead of shimmer (the usual TAA texture bias).
-    std::atomic<int> taa_lod{80};
+    /// Default 0: a negative bias sharpens, but it also makes textures shimmer (tested on a GTX 1070 Ti).
+    std::atomic<int> taa_lod{0};
     /// Edge smoothing of the pixels whose history was refused (moving characters): percent.
     std::atomic<int> taa_spatial{55};
+    /// Calming of the shimmering world (percent): the static world (the stencil's world value, not
+    /// characters or objects) keeps more history while the camera moves, trusts it through the
+    /// patch-change test and clips it less. 0 = the old rules.
+    std::atomic<int> taa_calm{60};
     /// FSR 3.1 with native HUD and text (UpscalerFsr3Ui), percent, live: fsr_lod is the texture detail
     /// (a negative mip bias of fsr_lod / 100 levels on top of FSR's own); fsr_objects the reactive
     /// strength of characters and objects (the stencil mask: 100 is upstream's, lower is sharper but
