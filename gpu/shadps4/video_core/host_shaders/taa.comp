@@ -339,7 +339,9 @@ void main() {
         }
     }
     // Optional diagnostic alpha; normal output remains opaque.
-    vec3 output_color = diag == 2 ? current : diag == 3 ? diagnostic_history : diag == 4 ? debug_view : shown;
+    // diag 5: the stencil mask the calming uses: white = static world, black = characters, objects, sky.
+    vec3 output_color = diag == 2 ? current : diag == 3 ? diagnostic_history : diag == 4 ? debug_view :
+                        diag == 5 ? vec3(calm > 0.0 ? 1.0 : 0.0) : shown;
     // The diagnostic views reach the screen with red and blue exchanged (checked with a pure red/blue swatch:
     // the swap is in how the scene image is written back; the normal picture is not affected, as it
     // is read through the same exchange). Exchanged here, so a view shows the colours described.

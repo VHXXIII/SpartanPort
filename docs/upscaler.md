@@ -394,6 +394,10 @@ skipping screen-space passes (3 or 4 indices) so a shifted full-screen quad leav
   weight on a moving pixel rises towards 0.9. Character edges keep the strict rules. The calm
   percentage travels in bits 8-15 of the `reset_history` push constant (bit 0 stays "no history");
   without a stencil in the depth buffer the bits stay 0 and nothing changes.
+  The menu's debug view shows the mask itself (diag 5: white = world) while the calming is on, to
+  check that the stencil value of the world (129) holds in a scene.
+- Texture detail goes below 0 (down to -100): a positive mip bias, softer textures, for far sharp
+  textures that flicker. Live, like the rest of the look.
 - Defaults (tuned in game on a GTX 1070 Ti): history 99% still / 55% moving, tolerance 175%,
   moving objects 55%, edges 55%, texture detail 0% (a negative mip bias sharpens but makes the
   textures shimmer; 80% was the default before and looked worse), calm 60%, sharpening 130%. They
