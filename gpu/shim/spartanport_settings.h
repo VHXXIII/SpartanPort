@@ -159,6 +159,8 @@ struct Values {
     /// Texture detail of the scene's materials: a negative mip bias of taa_lod / 100 levels, which the
     /// accumulation (jitter) turns into detail instead of shimmer (the usual TAA texture bias).
     /// Default 0: a negative bias sharpens, but it also makes textures shimmer (tested on a GTX 1070 Ti).
+    /// Below 0 the bias is positive (softer textures, down to -100 = one mip level): calms far, sharp
+    /// textures that flicker.
     std::atomic<int> taa_lod{0};
     /// Edge smoothing of the pixels whose history was refused (moving characters): percent.
     std::atomic<int> taa_spatial{55};

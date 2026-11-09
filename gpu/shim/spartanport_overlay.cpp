@@ -595,7 +595,7 @@ void ImageTab() {
         if (xess) {
             if (BeginRows("##xess_look")) {
                 if (const char* problem = s.xess_problem) InfoRow("XeSS status", problem);
-                SliderRow("Texture detail", s.taa_lod, 0, 150, "%d%%",
+                SliderRow("Texture detail", s.taa_lod, -100, 150, "%d%%",
                           "Sharper textures (a negative mip bias, in percent of one level): XeSS turns the "
                           "extra detail into a clean picture. Higher: more detail, more shimmer. Default 0%.");
                 SliderRow("Moving objects", s.xess_objects, 0, 100, "%d%%",
@@ -618,7 +618,7 @@ void ImageTab() {
             SliderRow("Moving objects", s.taa_objects, 0, 100, "%d%%",
                       "How much history a moving character or object loses. Higher: less ghosting there, "
                       "rougher edges. Default 55%.");
-            SliderRow("Texture detail", s.taa_lod, 0, 150, "%d%%",
+            SliderRow("Texture detail", s.taa_lod, -100, 150, "%d%%",
                       "Sharper textures (a negative mip bias, in percent of one level): the accumulation "
                       "turns the extra detail into a clean picture. Higher: more detail, more shimmer. "
                       "Default 0%.");

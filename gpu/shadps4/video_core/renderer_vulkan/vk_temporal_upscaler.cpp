@@ -1285,6 +1285,9 @@ void TemporalUpscaler::RecordTaa(vk::CommandBuffer cmdbuf, vk::ImageView color,
     }
     if (calm_mask) {
         params.reset |= u32(std::clamp(SpartanSettings::Get().taa_calm.load(), 0, 100)) << 8;
+        if (params.pad == 4) {
+            params.pad = 5; // menu debug view with the calming on: the world mask (taa.comp diag 5)
+        }
     }
     if (camera_motion.ViewProjectionCamera()) {
         params.pad |= 1u << 24; // depth rejection through the reprojection matrix
