@@ -384,9 +384,20 @@ skipping screen-space passes (3 or 4 indices) so a shifted full-screen quad leav
 - `pad` bits: 0-7 diagnostic view (4 = history debug view: red depth-rejected, green history lost,
   blue weight used), 8-15 A/B switches, 16-23 moving-object history loss in percent, 24 view-projection
   depth, 25 8-bit scene, 26-31 spatial smoothing.
+- Calming of the shimmering world (`taa_calm`, ini `taa_calm`, 0 = off): much of the visible flicker
+  comes from the game's own texture and specular aliasing, not from the accumulation. The scene
+  stencil tells the static world (stencil 129) from characters and objects; `RecordStencilReactive`
+  writes it to `reactive_image` before the TAA (the same mask XeSS uses) and `taa.comp` samples it
+  (binding 7). Where a pixel and its 3x3 neighbours are all world, the history is trusted more:
+  the variance-clip box is wider (up to +35%), a far clipped history loses less confidence (-60%),
+  the patch-change test that drops history for movers is weakened (it fires on shimmer), and the
+  weight on a moving pixel rises towards 0.9. Character edges keep the strict rules. The calm
+  percentage travels in bits 8-15 of the `reset_history` push constant (bit 0 stays "no history");
+  without a stencil in the depth buffer the bits stay 0 and nothing changes.
 - Defaults (tuned in game on a GTX 1070 Ti): history 99% still / 55% moving, tolerance 175%,
-  moving objects 55%, edges 55%, texture detail 80%, sharpening 130%. They live in
-  `shim/spartanport_settings.h` and in the menu hints.
+  moving objects 55%, edges 55%, texture detail 0% (a negative mip bias sharpens but makes the
+  textures shimmer; 80% was the default before and looked worse), calm 60%, sharpening 130%. They
+  live in `shim/spartanport_settings.h` and in the menu hints.
 
 ### XeSS in place of the accumulation (upscaler "XeSS", ini `upscaler=xess`, Windows only)
 

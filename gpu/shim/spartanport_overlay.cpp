@@ -597,7 +597,7 @@ void ImageTab() {
                 if (const char* problem = s.xess_problem) InfoRow("XeSS status", problem);
                 SliderRow("Texture detail", s.taa_lod, 0, 150, "%d%%",
                           "Sharper textures (a negative mip bias, in percent of one level): XeSS turns the "
-                          "extra detail into a clean picture. Higher: more detail, more shimmer. Default 80%.");
+                          "extra detail into a clean picture. Higher: more detail, more shimmer. Default 0%.");
                 SliderRow("Moving objects", s.xess_objects, 0, 100, "%d%%",
                           "How much XeSS distrusts its history on characters and objects (a mask from the "
                           "game's stencil). Higher: less ghosting behind them, rougher edges. 0% = off. "
@@ -621,7 +621,11 @@ void ImageTab() {
             SliderRow("Texture detail", s.taa_lod, 0, 150, "%d%%",
                       "Sharper textures (a negative mip bias, in percent of one level): the accumulation "
                       "turns the extra detail into a clean picture. Higher: more detail, more shimmer. "
-                      "Default 80%.");
+                      "Default 0%.");
+            SliderRow("Calm shimmering world", s.taa_calm, 0, 100, "%d%%",
+                      "Keeps more history on the static world (not on characters, told apart by the game's "
+                      "stencil), so shimmering textures and reflections settle. Higher: calmer, a little more "
+                      "blur while the camera moves. 0% = off. Default 60%.");
             SliderRow("Moving object edges", s.taa_spatial, 0, 100, "%d%%",
                       "Smooths the stair-stepped edges of moving characters, where the history is refused: "
                       "a spatial filter on those pixels only. Higher: smoother, slightly softer. Default 55%.");
