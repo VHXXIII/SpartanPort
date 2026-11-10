@@ -392,8 +392,14 @@ skipping screen-space passes (3 or 4 indices) so a shifted full-screen quad leav
   darkest of the eight neighbours of the source pixel: a pixel outside that range is pulled towards
   it by the strength (a bright one by scaling, a dark hole by adding), before it is used as the
   current colour, the clip box and the colour shown for a rejected history. The second neighbour is
-  on purpose: a one pixel wide bright line has two bright neighbours and stays. The percentage
-  travels in bits 8-15 of the `reset_history` push constant (bit 0 stays "no history").
+  on purpose: a one pixel wide bright line has two bright neighbours and stays. The slider goes to
+  300%: up to 100% that is all (a tester found it nearly invisible, the glints on chains cover several
+  pixels); 100-200% also limits the pixel to the mean +- k sigma of its eight neighbours (k from 3
+  down to 0.8); 200-300% adds `flick`, a share of the high-contrast fine detail (the Y range of the
+  clip box, smoothstep 0.12-0.45) on which the history is trusted more: wider clip box (+60%), less
+  clip penalty and change rejection, history weight on a moving pixel up to 0.9. That last stage can
+  leave faint trails behind moving characters. The value travels in bits 8-15 of the
+  `reset_history` push constant in half percent (bit 0 stays "no history").
 - Defaults (tuned in game on a GTX 1070 Ti): history 99% still / 55% moving, tolerance 175%,
   moving objects 55%, edges 55%, texture detail 0% (a negative mip bias sharpens but makes textures shimmer; 80% was the default before and looked worse), sharpening 130%. They live in
   `shim/spartanport_settings.h` and in the menu hints.
