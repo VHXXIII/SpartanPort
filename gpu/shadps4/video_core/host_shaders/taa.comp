@@ -10,10 +10,9 @@ layout(binding = 3) uniform sampler2D history_tex;
 layout(binding = 4, rgba16f) uniform writeonly image2D result_img;
 layout(binding = 5, rgba32f) uniform writeonly image2D next_history;
 layout(binding = 6, rgba16f) uniform writeonly image2D diagnostic_img;
-layout(binding = 7) uniform sampler2D reactive_tex; // stencil mask: 0 = the static world (read only with the calm bits set)
 layout(push_constant) uniform Params {
     vec2 jitter;
-    uint reset_history; // bit 0: no history; bits 8-15: calming of the shimmering world (percent, 0 = off, needs the mask in binding 7)
+    uint reset_history;
     uint pad; // bits 0-7: diagnostic output; 8-15: A/B switches; 16-23: history loss of changed patches (percent); 24: view-projection depth; 25: 8-bit scene; 26-31: spatial edge smoothing of low-history pixels (0..63)
     vec4 proj;
     vec4 prev_proj;
@@ -168,21 +167,6 @@ void main() {
                           depthSlope(depth,source,ivec2(0,1),size));
         depth = clamp(depth + dot(current_pos-vec2(source),slope),0.0,1.0-1e-7);
     }
-    // Calming of the shimmering world: the static world (stencil) trusts its history more. A pixel
-    // next to a character or an object (3x3 of the mask) keeps the strict rules, so their edges and
-    // trails are not touched. Reprojection of the world is exact (camera motion), the history there
-    // is reliable; the shimmer comes from the game's own texture and specular aliasing.
-    float calm = 0.0;
-    if (ldr && ((reset_history >> 8) & 0xffu) != 0u) {
-        const ivec2 mask_size = textureSize(reactive_tex, 0);
-        const ivec2 mask_at = min(color_source * mask_size / size, mask_size - 1);
-        float world = 1.0;
-        for (int y = -1; y <= 1; ++y)
-            for (int x = -1; x <= 1; ++x)
-                world = min(world, 1.0 - step(0.5, texelFetch(reactive_tex,
-                                   clamp(mask_at + ivec2(x, y), ivec2(0), mask_size - 1), 0).r));
-        calm = world * float((reset_history >> 8) & 0xffu) * 0.01;
-    }
     vec3 result = current;
     bool dyn_flag = false; // history alpha sign: this pixel looked like a mover this frame
     float history_weight = 0.0;
@@ -192,7 +176,7 @@ void main() {
     vec3 diagnostic_direct = current;
     float diagnostic_displacement = 0.0;
     // Do not sample undefined history on reset, including the first dispatch after resizing.
-    if ((reset_history & 1u) == 0u) {
+    if (reset_history == 0) {
         vec2 motion = texelFetch(motion_tex, source, 0).rg;
         vec2 previous_pos = vec2(p) + motion;
         if (diag != 0) {
@@ -256,7 +240,6 @@ void main() {
                         vec3 mean = moment1 / 9.0;
                         vec3 sigma = sqrt(max(moment2 / 9.0 - mean * mean, vec3(0.0)));
                         float gamma = ldr ? mix(prev_proj.w, prev_proj.w * 0.72, moving) : mix(1.25, 0.9, moving);
-                        gamma *= 1.0 + 0.35 * calm; // a shimmering world keeps its average
                         box_lo = max(lo, mean - gamma * sigma);
                         box_hi = min(hi, mean + gamma * sigma);
                     }
@@ -271,7 +254,7 @@ void main() {
                 // Reliable history suppresses subpixel shimmer even on distant geometry.
                 // LDR: history that had to be clipped far (a moving object without a motion vector, a
                 // lighting change) is less trusted, which removes the smear behind characters.
-                float confidence = ldr ? 1.0 - clamp(clip_error * proj.w, 0.0, 0.75) * (1.0 - 0.6 * calm) : 1.0;
+                float confidence = ldr ? 1.0 - clamp(clip_error * proj.w, 0.0, 0.75) : 1.0;
                 if (ldr && (variant & 128u) == 0u) {
                     // Objects without motion vectors (characters, foliage): a slow mover stays inside
                     // the neighbourhood box and passes the depth test, so its history smears. The
@@ -297,11 +280,9 @@ void main() {
                             if ((floatBitsToUint(texelFetch(history_tex, clamp(flag_at + ivec2(fx, fy), ivec2(0), size - 1), 0).a) >> 31) != 0u)
                                 fired_before = true;
                     if (!fired_before) changed *= 0.3;
-                    changed *= 1.0 - calm; // the world shimmers; only characters count as movers
                     confidence *= 1.0 - float((pad >> 16) & 0xffu) * 0.01 * changed;
                 }
-                float weight = (ldr ? mix(prev_proj.x, mix(prev_proj.y, max(prev_proj.y, 0.9), calm), moving)
-                             : mix(0.98, 0.85, moving)) *
+                float weight = (ldr ? mix(prev_proj.x, prev_proj.y, moving) : mix(0.98, 0.85, moving)) *
                                coverage * confidence;
                 history_weight = weight;
                 // diag 4: red = depth-rejected share, green = history lost to colour change / moving
@@ -339,9 +320,7 @@ void main() {
         }
     }
     // Optional diagnostic alpha; normal output remains opaque.
-    // diag 5: the stencil mask the calming uses: white = static world, black = characters, objects, sky.
-    vec3 output_color = diag == 2 ? current : diag == 3 ? diagnostic_history : diag == 4 ? debug_view :
-                        diag == 5 ? vec3(calm > 0.0 ? 1.0 : 0.0) : shown;
+    vec3 output_color = diag == 2 ? current : diag == 3 ? diagnostic_history : diag == 4 ? debug_view : shown;
     // The diagnostic views reach the screen with red and blue exchanged (checked with a pure red/blue swatch:
     // the swap is in how the scene image is written back; the normal picture is not affected, as it
     // is read through the same exchange). Exchanged here, so a view shows the colours described.

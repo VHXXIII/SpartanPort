@@ -277,8 +277,6 @@ inline constexpr std::pair<std::string_view, const char*> ChineseText[] = {
     {"How much XeSS distrusts its history on characters and objects (a mask from the game's stencil). Higher: less ghosting behind them, rougher edges. 0% = off. Default 95%.", "XeSS 对角色和物体上的历史画面有多不信任（来自游戏模板缓冲的遮罩）。更高：它们身后的拖影更少，边缘更粗糙。0% = 关闭。默认 95%。"},
     {"Sharpening after XeSS, separate from the Sharpening (RCAS) switch below. 0% = off. Default 145%.", "XeSS 之后的锐化，独立于下方的“锐化 (RCAS)”开关。0% = 关闭。默认 145%。"},
     {"Sharper textures (a negative mip bias, in percent of one level): the accumulation turns the extra detail into a clean picture. Higher: more detail, more shimmer. Default 0%.", "更锐利的纹理（负 mip 偏置，以一级的百分比表示）：累积会把额外细节变成干净的画面。数值越高：细节越多，闪烁越多。默认 0%。"},
-    {"Calm shimmering world", "稳定闪烁的场景"},
-    {"Keeps more history on the static world (not on characters, told apart by the game's stencil), so shimmering textures and reflections settle. Higher: calmer, a little more blur while the camera moves. 0% = off. Default 60%.", "在静态场景中保留更多历史（角色除外，通过游戏的模板缓冲区区分），让闪烁的纹理和反射趋于稳定。数值越高：越稳定，镜头移动时略多模糊。0% = 关闭。默认 60%。"},
     {"Smooths the stair-stepped edges of moving characters, where the history is refused: a spatial filter on those pixels only. Higher: smoother, slightly softer. Default 55%.", "平滑运动角色上因历史被拒绝而出现的锯齿边缘：仅对这些像素使用空间滤波。数值越高：越平滑，略偏软。默认 55%。"},
     {"Shows where the history is used: red = rejected by depth, green = lost to colour change, blue = history weight used. For bug reports; not saved.", "显示历史的使用位置：红色 = 因深度被拒绝，绿色 = 因颜色变化而丢失，蓝色 = 使用的历史权重。用于错误报告；不会保存。"},
     {"Sharpening after the accumulation, separate from the Sharpening (RCAS) switch below. 0% = off. Default 130%.", "累积之后的锐化，独立于下方的“锐化 (RCAS)”开关。0% = 关闭。默认 130%。"},

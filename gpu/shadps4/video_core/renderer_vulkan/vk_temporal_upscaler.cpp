@@ -1108,11 +1108,11 @@ void TemporalUpscaler::CreatePipelines() {
     taa_sharpen_pipeline = compute(TAA_SHARPEN_COMP, *taa_sharpen_pipeline_layout);
     taa_sharpen_ldr_pipeline = compute(TAA_SHARPEN_LDR_COMP, *taa_sharpen_pipeline_layout);
     {
-        std::array<vk::DescriptorSetLayoutBinding, 8> bindings{};
+        std::array<vk::DescriptorSetLayoutBinding, 7> bindings{};
         for (u32 i = 0; i < bindings.size(); ++i) {
             bindings[i] = {.binding = i,
-                .descriptorType = (i < 4 || i == 7) ? vk::DescriptorType::eCombinedImageSampler
-                                                    : vk::DescriptorType::eStorageImage,
+                .descriptorType = i < 4 ? vk::DescriptorType::eCombinedImageSampler
+                                        : vk::DescriptorType::eStorageImage,
                 .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eCompute};
         }
         taa_desc_layout = Check(device.createDescriptorSetLayoutUnique({
@@ -1253,23 +1253,17 @@ void TemporalUpscaler::RecordTaa(vk::CommandBuffer cmdbuf, vk::ImageView color,
     }
     cmdbuf.pipelineBarrier2({.imageMemoryBarrierCount = u32(barriers.size()),
                              .pImageMemoryBarriers = barriers.data()});
-    // The stencil mask (world = 0) for the calming of the shimmering world; without it a valid
-    // view (the history) is bound and the shader never reads it.
-    const bool calm_mask = xess_inputs && xess_inputs->has_mask && camera_motion.ViewProjectionCamera() &&
-                           SpartanSettings::Get().taa_calm.load() > 0;
-    const std::array<vk::ImageView, 8> views{
+    const std::array<vk::ImageView, 7> views{
         color, depth, *motion_view, *taa_history_views[1 - taa_next],
-        *output_view, *taa_history_views[taa_next], *opaque_view,
-        calm_mask ? *reactive_view : *taa_history_views[1 - taa_next]};
-    std::array<vk::DescriptorImageInfo, 8> infos{};
-    std::array<vk::WriteDescriptorSet, 8> writes{};
+        *output_view, *taa_history_views[taa_next], *opaque_view};
+    std::array<vk::DescriptorImageInfo, 7> infos{};
+    std::array<vk::WriteDescriptorSet, 7> writes{};
     for (u32 i = 0; i < infos.size(); ++i) {
-        const bool sampled = i < 4 || i == 7;
-        infos[i] = {.sampler = sampled ? *taa_sampler : vk::Sampler{},
+        infos[i] = {.sampler = i < 4 ? *taa_sampler : vk::Sampler{},
                     .imageView = views[i], .imageLayout = vk::ImageLayout::eGeneral};
         writes[i] = {.dstBinding = i, .descriptorCount = 1,
-            .descriptorType = sampled ? vk::DescriptorType::eCombinedImageSampler
-                                      : vk::DescriptorType::eStorageImage,
+            .descriptorType = i < 4 ? vk::DescriptorType::eCombinedImageSampler
+                                    : vk::DescriptorType::eStorageImage,
             .pImageInfo = &infos[i]};
     }
     struct Params {
@@ -1282,12 +1276,6 @@ void TemporalUpscaler::RecordTaa(vk::CommandBuffer cmdbuf, vk::ImageView color,
              camera_motion.TaaDepthParameters(), camera_motion.Reprojection()};
     if (SpartanSettings::Get().taa_debug.load() && params.pad == 0) {
         params.pad = 4; // menu: TAA debug view (taa.comp diag 4)
-    }
-    if (calm_mask) {
-        params.reset |= u32(std::clamp(SpartanSettings::Get().taa_calm.load(), 0, 100)) << 8;
-        if (params.pad == 4) {
-            params.pad = 5; // menu debug view with the calming on: the world mask (taa.comp diag 5)
-        }
     }
     if (camera_motion.ViewProjectionCamera()) {
         params.pad |= 1u << 24; // depth rejection through the reprojection matrix
@@ -1304,20 +1292,19 @@ void TemporalUpscaler::RecordTaa(vk::CommandBuffer cmdbuf, vk::ImageView color,
         params.pad |= u32(std::clamp(taa.taa_spatial.load(), 0, 100) * 63 / 100) << 26;
         // One line when the look settles for 12 frames (the menu sliders change it every frame while
         // dragged): every pause on a new value is logged, so a log shows what each slider did.
-        static std::array<float, 8> logged{-1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
-        static std::array<float, 8> pending = logged;
+        static std::array<float, 7> logged{-1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
+        static std::array<float, 7> pending = logged;
         static u32 stable_frames = 0;
-        const std::array<float, 8> now{look[0], look[1], look[2], float(objects),
+        const std::array<float, 7> now{look[0], look[1], look[2], float(objects),
                                        float(taa.taa_sharpen.load()), float(taa.taa_spatial.load()),
-                                       float(taa.taa_lod.load()), calm_mask ? float(taa.taa_calm.load()) : -2.0f};
+                                       float(taa.taa_lod.load())};
         if (now != pending) {
             pending = now;
             stable_frames = 0;
         } else if (stable_frames < 12 && ++stable_frames == 12 && pending != logged) {
             logged = pending;
             std::printf("TAA look: static %g moving %g tolerance %g objects %g sharpen %g edges %g "
-                        "texture detail %g calm %g (-2: no stencil mask)\n", now[0], now[1], now[2], now[3], now[4], now[5],
-                        now[6], now[7]);
+                        "texture detail %g\n", now[0], now[1], now[2], now[3], now[4], now[5], now[6]);
         }
         params.depth[1] = {look[0], look[1], 1.0f, look[2]};
         params.depth[0][3] = look[3];
@@ -2002,10 +1989,8 @@ void TemporalUpscaler::RunSceneTaa() {
 
     // XeSS's responsive mask: the characters and objects of the scene stencil (they move without
     // motion vectors, so their history would ghost). The mask pass needs the depth in General.
-    // The TAA takes the same mask to tell the shimmering static world from characters (taa_calm).
-    const bool wants_mask = SpartanSettings::Get().upscaler == SpartanSettings::UpscalerXess ||
-                            SpartanSettings::Get().taa_calm.load() > 0;
-    const bool has_mask = wants_mask && RecordStencilReactive(cmdbuf, depth, depth_format, w, h);
+    const bool has_mask = SpartanSettings::Get().upscaler == SpartanSettings::UpscalerXess &&
+                          RecordStencilReactive(cmdbuf, depth, depth_format, w, h);
     const XessInputs xess_inputs{color.GetImage(), depth.GetImage(),
                                  srgb_color ? vk::Format::eR8G8B8A8Srgb : vk::Format::eR8G8B8A8Unorm,
                                  depth_format, w, h, has_mask};
