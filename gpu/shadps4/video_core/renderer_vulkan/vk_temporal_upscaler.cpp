@@ -1291,8 +1291,8 @@ void TemporalUpscaler::RecordTaa(vk::CommandBuffer cmdbuf, vk::ImageView color,
         params.pad |= objects << 16;
         params.pad |= u32(std::clamp(taa.taa_spatial.load(), 0, 100) * 63 / 100) << 26;
         // Sparkle filter: bits 8-15 of the reset word (bit 0 stays "no history").
-        const u32 sparkle = u32(std::clamp(taa.taa_sparkle.load(), 0, 100));
-        params.reset |= sparkle << 8;
+        const u32 sparkle = u32(std::clamp(taa.taa_sparkle.load(), 0, 300));
+        params.reset |= (sparkle / 2) << 8; // half percent: 300% fits the 8 bits
         // One line when the look settles for 12 frames (the menu sliders change it every frame while
         // dragged): every pause on a new value is logged, so a log shows what each slider did.
         static std::array<float, 8> logged{-1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};

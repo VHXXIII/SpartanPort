@@ -165,7 +165,7 @@ void Set(Values& v, const std::string& key, const std::string& value) {
     } else if (key == "taa_spatial") {
         v.taa_spatial = std::clamp(i, 0, 100);
     } else if (key == "taa_sparkle") {
-        v.taa_sparkle = std::clamp(i, 0, 100);
+        v.taa_sparkle = std::clamp(i, 0, 300);
     } else if (key == "xess_sharpen") {
         v.xess_sharpen = std::clamp(i, 0, 200);
     } else if (key == "xess_objects") {
