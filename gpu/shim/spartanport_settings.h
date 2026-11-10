@@ -164,6 +164,10 @@ struct Values {
     std::atomic<int> taa_lod{0};
     /// Edge smoothing of the pixels whose history was refused (moving characters): percent.
     std::atomic<int> taa_spatial{55};
+    /// Sparkle filter (percent, 0 = off): an isolated bright or dark pixel (a specular glint on metal,
+    /// a chain link) is pulled towards its neighbours before it enters the history; without it
+    /// such a pixel flickers from frame to frame.
+    std::atomic<int> taa_sparkle{0};
     /// FSR 3.1 with native HUD and text (UpscalerFsr3Ui), percent, live: fsr_lod is the texture detail
     /// (a negative mip bias of fsr_lod / 100 levels on top of FSR's own); fsr_objects the reactive
     /// strength of characters and objects (the stencil mask: 100 is upstream's, lower is sharper but
