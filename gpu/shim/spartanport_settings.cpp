@@ -165,7 +165,9 @@ void Set(Values& v, const std::string& key, const std::string& value) {
     } else if (key == "taa_spatial") {
         v.taa_spatial = std::clamp(i, 0, 100);
     } else if (key == "taa_sparkle") {
-        v.taa_sparkle = std::clamp(i, 0, 300);
+        v.taa_sparkle = std::clamp(i, 0, 200);
+    } else if (key == "taa_hold") {
+        v.taa_hold = std::clamp(i, 0, 100);
     } else if (key == "xess_sharpen") {
         v.xess_sharpen = std::clamp(i, 0, 200);
     } else if (key == "xess_objects") {
@@ -559,10 +561,10 @@ void Save() {
                  v.mouse_aim_style.load(), v.mouse_aim_sensitivity.load());
     std::fprintf(file, "depth_of_field=%d\n", int(v.depth_of_field.load()));
     std::fprintf(file, "taa_static=%d\ntaa_moving=%d\ntaa_tolerance=%d\ntaa_objects=%d\ntaa_sharpen=%d\n"
-                 "taa_lod=%d\ntaa_spatial=%d\ntaa_sparkle=%d\n",
+                 "taa_lod=%d\ntaa_spatial=%d\ntaa_sparkle=%d\ntaa_hold=%d\n",
                  v.taa_static.load(), v.taa_moving.load(), v.taa_tolerance.load(), v.taa_objects.load(),
                  v.taa_sharpen.load(), v.taa_lod.load(), v.taa_spatial.load(),
-                 v.taa_sparkle.load());
+                 v.taa_sparkle.load(), v.taa_hold.load());
     std::fprintf(file, "fsr_lod=%d\nfsr_objects=%d\n", v.fsr_lod.load(), v.fsr_objects.load());
     std::fprintf(file, "xess_objects=%d\nxess_sharpen=%d\n", v.xess_objects.load(), v.xess_sharpen.load());
     std::fprintf(file, "anti_aliasing=%s\n",
