@@ -1291,24 +1291,25 @@ void TemporalUpscaler::RecordTaa(vk::CommandBuffer cmdbuf, vk::ImageView color,
         params.pad |= objects << 16;
         params.pad |= u32(std::clamp(taa.taa_spatial.load(), 0, 100) * 63 / 100) << 26;
         // Sparkle filter: bits 8-15 of the reset word (bit 0 stays "no history").
-        const u32 sparkle = u32(std::clamp(taa.taa_sparkle.load(), 0, 300));
-        params.reset |= (sparkle / 2) << 8; // half percent: 300% fits the 8 bits
+        const u32 sparkle = u32(std::clamp(taa.taa_sparkle.load(), 0, 200));
+        const u32 hold = u32(std::clamp(taa.taa_hold.load(), 0, 100));
+        params.reset |= ((sparkle / 2) << 8) | (hold << 16); // half percent; bits 16-23 hold
         // One line when the look settles for 12 frames (the menu sliders change it every frame while
         // dragged): every pause on a new value is logged, so a log shows what each slider did.
-        static std::array<float, 8> logged{-1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
-        static std::array<float, 8> pending = logged;
+        static std::array<float, 9> logged{-1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
+        static std::array<float, 9> pending = logged;
         static u32 stable_frames = 0;
-        const std::array<float, 8> now{look[0], look[1], look[2], float(objects),
+        const std::array<float, 9> now{look[0], look[1], look[2], float(objects),
                                        float(taa.taa_sharpen.load()), float(taa.taa_spatial.load()),
-                                       float(taa.taa_lod.load()), float(sparkle)};
+                                       float(taa.taa_lod.load()), float(sparkle), float(hold)};
         if (now != pending) {
             pending = now;
             stable_frames = 0;
         } else if (stable_frames < 12 && ++stable_frames == 12 && pending != logged) {
             logged = pending;
             std::printf("TAA look: static %g moving %g tolerance %g objects %g sharpen %g edges %g "
-                        "texture detail %g sparkle %g\n", now[0], now[1], now[2], now[3], now[4], now[5],
-                        now[6], now[7]);
+                        "texture detail %g sparkle %g hold %g\n", now[0], now[1], now[2], now[3], now[4], now[5],
+                        now[6], now[7], now[8]);
         }
         params.depth[1] = {look[0], look[1], 1.0f, look[2]};
         params.depth[0][3] = look[3];

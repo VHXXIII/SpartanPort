@@ -12,7 +12,7 @@ layout(binding = 5, rgba32f) uniform writeonly image2D next_history;
 layout(binding = 6, rgba16f) uniform writeonly image2D diagnostic_img;
 layout(push_constant) uniform Params {
     vec2 jitter;
-    uint reset_history; // bit 0: no history; bits 8-15: sparkle filter, half percent (0 = off, 150 = 300%)
+    uint reset_history; // bit 0: no history; bits 8-15: sparkle filter, half percent (0 = off, 100 = 200%); bits 16-23: detail hold, percent
     uint pad; // bits 0-7: diagnostic output; 8-15: A/B switches; 16-23: history loss of changed patches (percent); 24: view-projection depth; 25: 8-bit scene; 26-31: spatial edge smoothing of low-history pixels (0..63)
     vec4 proj;
     vec4 prev_proj;
@@ -155,13 +155,13 @@ void main() {
         // by half a pixel every frame; the neighbourhood box keeps the overshoot in check.
         current = clamp(bicubicSample(color_tex, current_pos, size), rgb_lo, rgb_hi);
     }
-    // Sparkle filter, 0-3 (0-300%): up to 1 it pulls a pixel no neighbour shares towards the second
+    // Sparkle filter, 0-2 (0-200%): up to 1 it pulls a pixel no neighbour shares towards the second
     // brightest / darkest neighbour; 1-2 also limits it to the neighbours' mean +- k sigma (k from 3
-    // down to 0.8), so a glint of several pixels is cut too; 2-3 (below, `flick`) holds more history
-    // on high-contrast fine detail.
+    // down to 1.2), so a glint of several pixels is cut too. Detail hold, 0-1 (below, `flick`): holds
+    // more history on high-contrast fine detail.
     const float sparkle = float((reset_history >> 8) & 0xffu) * 0.02;
     const float spark_stat = clamp(sparkle - 1.0, 0.0, 1.0);
-    const float spark_hold = clamp(sparkle - 2.0, 0.0, 1.0);
+    const float spark_hold = float((reset_history >> 16) & 0xffu) * 0.01;
     if (ldr && sparkle > 0.0) {
         vec3 t = tonemap(current);
         const float l = luma(t);
@@ -169,7 +169,7 @@ void main() {
         if (spark_stat > 0.0) {
             const float mean8 = nsum * 0.125;
             const float sd8 = sqrt(max(nsum2 * 0.125 - mean8 * mean8, 0.0));
-            const float k = mix(3.0, 0.8, spark_stat);
+            const float k = mix(3.0, 1.2, spark_stat);
             bright_limit = min(hi2, mean8 + k * sd8);
             dark_limit = max(lo2, mean8 - k * sd8);
         }

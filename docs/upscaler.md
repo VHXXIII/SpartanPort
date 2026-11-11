@@ -386,20 +386,21 @@ skipping screen-space passes (3 or 4 indices) so a shifted full-screen quad leav
   depth, 25 8-bit scene, 26-31 spatial smoothing.
 - Texture detail goes below 0 (down to -300): a positive mip bias, softer textures, for far sharp
   textures that flicker (a tester found -200 calmer with little visible loss). Live, like the rest.
-- Sparkle filter (`taa_sparkle`, 0 = off, default off): the glint of a specular highlight on metal (chain
+- Sparkle filter (`taa_sparkle`, 0-200%, default off): the glint of a specular highlight on metal (chain
   links, armour) is often one pixel that no neighbour shares, and with every jitter phase it is there
   or not. `taa.comp` compares the current tonemapped luma with the second brightest and second
   darkest of the eight neighbours of the source pixel: a pixel outside that range is pulled towards
   it by the strength (a bright one by scaling, a dark hole by adding), before it is used as the
   current colour, the clip box and the colour shown for a rejected history. The second neighbour is
-  on purpose: a one pixel wide bright line has two bright neighbours and stays. The slider goes to
-  300%: up to 100% that is all (a tester found it nearly invisible, the glints on chains cover several
-  pixels); 100-200% also limits the pixel to the mean +- k sigma of its eight neighbours (k from 3
-  down to 0.8); 200-300% adds `flick`, a share of the high-contrast fine detail (the Y range of the
-  clip box, smoothstep 0.12-0.45) on which the history is trusted more: wider clip box (+60%), less
-  clip penalty and change rejection, history weight on a moving pixel up to 0.9. That last stage can
-  leave faint trails behind moving characters. The value travels in bits 8-15 of the
-  `reset_history` push constant in half percent (bit 0 stays "no history").
+  on purpose: a one pixel wide bright line has two bright neighbours and stays. 100-200% also limits
+  the pixel to the mean +- k sigma of its eight neighbours (k from 3 down to 1.2), which cuts the
+  glints of several pixels on chains (at 100% alone a tester saw almost nothing).
+- Detail hold (`taa_hold`, 0-100%, default off): a share `flick` of the high-contrast fine detail (the
+  Y range of the clip box, smoothstep 0.12-0.45) on which the history is trusted more: wider clip box
+  (+60%), less clip penalty and change rejection, history weight on a moving pixel up to 0.9. It can
+  leave faint trails behind moving characters; a tester found the former combined 300% too much, so
+  it is its own slider now. Both values travel in the `reset_history` push constant (bit 0 stays "no
+  history"; bits 8-15 sparkle in half percent, bits 16-23 hold).
 - Defaults (tuned in game on a GTX 1070 Ti): history 99% still / 55% moving, tolerance 175%,
   moving objects 55%, edges 55%, texture detail 0% (a negative mip bias sharpens but makes textures shimmer; 80% was the default before and looked worse), sharpening 130%. They live in
   `shim/spartanport_settings.h` and in the menu hints.

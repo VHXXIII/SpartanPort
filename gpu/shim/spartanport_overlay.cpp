@@ -625,12 +625,13 @@ void ImageTab() {
             SliderRow("Moving object edges", s.taa_spatial, 0, 100, "%d%%",
                       "Smooths the stair-stepped edges of moving characters, where the history is refused: "
                       "a spatial filter on those pixels only. Higher: smoother, slightly softer. Default 55%.");
-            SliderRow("Sparkle filter", s.taa_sparkle, 0, 300, "%d%%",
+            SliderRow("Sparkle filter", s.taa_sparkle, 0, 200, "%d%%",
                       "Tames isolated bright or dark pixels (specular glints on metal, chain links) before they "
                       "enter the history; they would otherwise flicker. Above 100% a pixel is also held to its "
-                      "neighbours' spread, above 200% more history is kept on high-contrast fine detail "
-                      "(chains, far textures; a risk of faint trails). Higher: calmer metal, weaker fine "
-                      "glints. 0% = off. Default 0%.");
+                      "neighbours' spread. Higher: calmer metal, weaker fine glints. 0% = off. Default 0%.");
+            SliderRow("Detail hold", s.taa_hold, 0, 100, "%d%%",
+                      "Holds more history on high-contrast fine detail (chains, grates, far textures) so it "
+                      "flickers less. A risk of faint trails behind moving characters. 0% = off. Default 0%.");
             CheckRow("Debug view (history)", s.taa_debug,
                      "Shows where the history is used: red = rejected by depth, green = lost to colour "
                      "change, blue = history weight used. For bug reports; not saved.");
