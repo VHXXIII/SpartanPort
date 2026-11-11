@@ -380,7 +380,11 @@ skipping screen-space passes (3 or 4 indices) so a shifted full-screen quad leav
   target); the accumulation turns it into detail.
 - Sharpening: RCAS-style pass `taa_sharpen.comp` after the accumulation (`taa_sharpen`, up to 200%,
   0 = off). It is independent of the menu's "Sharpening (RCAS)" switch, which only controls the host
-  pass (and FSR's own sharpening, `SharpenOn()`).
+  pass (and FSR's own sharpening, `SharpenOn()`). Above 100% the RCAS change is extrapolated, which
+  drew bright and dark halos along strong edges (a tester's "light edges" at 110-200%); the result is
+  now kept within the plain RCAS result or 10% of the local range beyond the four neighbours,
+  whichever is wider, so the extra strength sharpens texture detail without a halo on an edge.
+  Up to 100% the pass is unchanged.
 - `pad` bits: 0-7 diagnostic view (4 = history debug view: red depth-rejected, green history lost,
   blue weight used), 8-15 A/B switches, 16-23 moving-object history loss in percent, 24 view-projection
   depth, 25 8-bit scene, 26-31 spatial smoothing.
