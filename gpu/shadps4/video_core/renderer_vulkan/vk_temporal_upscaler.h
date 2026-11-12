@@ -72,6 +72,10 @@ public:
     /// Start of every draw and dispatch: runs the upscale queued by OnPixelShader.
     void RunPending();
 
+    /// Video-out flip, in GPU command order: whether the buffer being shown was rendered and then
+    /// upscaled since it was last shown. One "Present status" line per 300 flips in last_run.log.
+    void NoteFlip(VAddr display_address);
+
     /// The temporal upscaler is the port's own TAA (God of War III's scene frames, camera found by
     /// content, one jitter per scene); every other mode takes the FSR path.
     [[nodiscard]] bool SceneTaa() const;
@@ -262,6 +266,18 @@ private:
     u32 trigger_seen = 0;   // times the frame's trigger dispatch was seen since then
     u32 composite_seen = 0; // composite draws seen since then (God of War III)
     u32 ldr_runs = 0;       // upscales of the 8-bit scene colour since then
+    // NoteFlip: per display buffer, the order of its last composite, upscale and flip.
+    struct FlipSerials {
+        u64 composite = 0, taa = 0, shown = 0;
+    };
+    std::mutex flip_mutex;
+    std::unordered_map<VAddr, FlipSerials> flip_serials;
+    u64 flip_serial = 0;
+    VAddr last_composite_address = 0, last_taa_address = 0;
+    std::array<u32, 4> flip_counts{}; // upscaled, repeated, missed, other buffers
+    u32 flips_counted = 0, flip_diag_lines = 0;
+    void NoteComposite(VAddr address);
+    void NoteTaaRun(VAddr address);
     const char* skip_reason = "none"; // why the last queued upscale did not run
     bool composite_pending = false;
     bool composite_passed = false;

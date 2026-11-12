@@ -463,3 +463,11 @@ in the moving region.
 `skip`, `scenes`, `done_skips`), `TAA scene: skipped (reason)` / `running again` when a scene is not
 upscaled, and `TAA look: ...` once the sliders settle. `ran_last_frame` and the menu's "running"
 indicator follow the dispatches, not the display passes.
+
+## Present status (diagnostics)
+
+With a scene TAA selected, `last_run.log` gets a `Present status` line every 300 flips:
+`upscaled` flips showed a buffer that was rendered and then upscaled, `repeated` showed a buffer
+without a new composite, `missed` showed a freshly rendered buffer whose upscale had not run yet
+(the TAA is then not visible in that frame), `other_buffers` are menus, movies and buffers the scene
+never used. The first `missed` flips are listed with their buffer addresses (`Present diag`).

@@ -788,6 +788,9 @@ void TemporalUpscaler::OnPixelShader(u64 ps_hash, VideoCore::ImageId color) {
         return;
     }
     ++composite_seen;
+    if (const auto* image = texture_cache.TryGetImage(color, 0)) {
+        NoteComposite(image->info.guest_address);
+    }
     composite_passed = true;
     // God of War III: the scenes, not the display passes, are the frames; the status line comes from here.
     if (SpartanSettings::Get().upscaler != SpartanSettings::UpscalerOff && ++composite_status >= 300) {
@@ -801,6 +804,58 @@ void TemporalUpscaler::OnPixelShader(u64 ps_hash, VideoCore::ImageId color) {
     }
     OnSceneColor(color); // keeps the image uid in step
     composite_pending = true;
+}
+
+void TemporalUpscaler::NoteComposite(VAddr address) {
+    std::scoped_lock lk{flip_mutex};
+    flip_serials[address].composite = ++flip_serial;
+    last_composite_address = address;
+}
+
+void TemporalUpscaler::NoteTaaRun(VAddr address) {
+    std::scoped_lock lk{flip_mutex};
+    flip_serials[address].taa = ++flip_serial;
+    last_taa_address = address;
+}
+
+void TemporalUpscaler::NoteFlip(VAddr display_address) {
+    // Diagnostics for "the TAA is not visible in some scenes" (last_run.log): did the buffer shown
+    // by this flip get its upscale after its composite? Counted per 300 flips.
+    if (!SceneTaa()) {
+        return;
+    }
+    std::scoped_lock lk{flip_mutex};
+    const auto it = flip_serials.find(display_address);
+    const char* kind = "other buffer";
+    if (it == flip_serials.end()) {
+        ++flip_counts[3];
+    } else {
+        auto& s = it->second;
+        if (s.composite <= s.shown) {
+            ++flip_counts[1];
+            kind = "repeated";
+        } else if (s.taa > s.composite) {
+            ++flip_counts[0];
+            kind = "upscaled";
+        } else {
+            ++flip_counts[2];
+            kind = "MISSED";
+        }
+        s.shown = ++flip_serial;
+    }
+    if ((kind[0] == 'M' && flip_diag_lines < 24) || (kind[0] == 'o' && flip_counts[3] <= 6)) {
+        flip_diag_lines += kind[0] == 'M';
+        std::printf("Present diag: flip %#llx is %s (last composite %#llx, last upscale %#llx)\n",
+                    static_cast<unsigned long long>(display_address), kind,
+                    static_cast<unsigned long long>(last_composite_address),
+                    static_cast<unsigned long long>(last_taa_address));
+    }
+    if (++flips_counted >= 300) {
+        std::printf("Present status: flips=%u upscaled=%u repeated=%u missed=%u other_buffers=%u\n",
+                    flips_counted, flip_counts[0], flip_counts[1], flip_counts[2], flip_counts[3]);
+        flip_counts = {};
+        flips_counted = 0;
+    }
 }
 
 void TemporalUpscaler::RunPending() {
@@ -2007,6 +2062,7 @@ void TemporalUpscaler::RunSceneTaa() {
     reset = false;
     dispatched_last_frame = true; frames_since_run = 0;
     ++ldr_runs;
+    NoteTaaRun(color.info.guest_address);
     skip_reason = "none";
     if (std::strcmp(logged_skip, "none") != 0) {
         logged_skip = "none";
