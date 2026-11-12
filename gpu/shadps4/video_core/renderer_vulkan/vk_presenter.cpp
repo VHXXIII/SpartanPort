@@ -561,6 +561,7 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup& 
     static int frame_dump_index = 0;
     const bool frame_dump = frame_dump_trigger && std::remove(frame_dump_trigger) == 0;
     // spartanport: scaled upscaler presets: the output-size display buffer drawn by the port.
+    rasterizer->GetUpscaler().NoteFlip(cpu_address);
     TemporalUpscaler::Display display{};
     const bool upscaled = rasterizer->GetUpscaler().DisplayOverride(cpu_address, display);
     VideoCore::ImageId image_id{};
