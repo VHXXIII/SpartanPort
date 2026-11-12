@@ -561,6 +561,11 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup& 
     static int frame_dump_index = 0;
     const bool frame_dump = frame_dump_trigger && std::remove(frame_dump_trigger) == 0;
     // spartanport: scaled upscaler presets: the output-size display buffer drawn by the port.
+    // spartanport: a scene that ends with its composite and has no draw before the flip (no HUD, as in
+    // calm parts of the game) still has its upscale queued: it ran with the next frame's first draw,
+    // after this frame was shown (the TAA looked off until the pause menu). Run it before the
+    // shown buffer is read. Nothing is queued in the usual case, where HUD draws already ran it.
+    rasterizer->GetUpscaler().RunPending();
     rasterizer->GetUpscaler().NoteFlip(cpu_address);
     TemporalUpscaler::Display display{};
     const bool upscaled = rasterizer->GetUpscaler().DisplayOverride(cpu_address, display);

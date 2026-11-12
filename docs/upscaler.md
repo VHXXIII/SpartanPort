@@ -471,3 +471,7 @@ With a scene TAA selected, `last_run.log` gets a `Present status` line every 300
 without a new composite, `missed` showed a freshly rendered buffer whose upscale had not run yet
 (the TAA is then not visible in that frame), `other_buffers` are menus, movies and buffers the scene
 never used. The first `missed` flips are listed with their buffer addresses (`Present diag`).
+
+A scene without a HUD draw between its composite and the flip used to be upscaled with the next
+frame's first draw, after it was shown (`missed` in most flips of calm scenes such as the cave before
+the Bow of Apollo). The flip now runs the queued upscale first (Presenter::PrepareFrame).
