@@ -1456,18 +1456,20 @@ int main(int argc, char **argv) {
         _exit(missing ? 1 : 0); /* no destructors: GPU threads are running */
     }
     if (patch_file) apply_patches(patch_file, segments, ns, relocs, nr);
-    if (gpu_enabled) install_orb_multiplier(segments, ns, size);
-    if (gpu_enabled) install_cheats(segments, ns, size);
+    /* test build B: the guest-code feature hooks are off (set SPARTAN_TEST_HOOKS=1 to install them) */
+    const int test_hooks = getenv("SPARTAN_TEST_HOOKS") != NULL;
+    if (gpu_enabled && test_hooks) install_orb_multiplier(segments, ns, size);
+    if (gpu_enabled && test_hooks) install_cheats(segments, ns, size);
     if (gpu_enabled) find_engine_fps(segments, ns, size);
     if (gpu_enabled) find_power_up_menu(segments, ns, size);
-    if (gpu_enabled) install_actor_watch(segments, ns, size);
-    if (gpu_enabled) install_player_hook(segments, ns, size);
-    if (gpu_enabled) install_wall_seam_fix(segments, ns, size);
-    if (gpu_enabled) install_stat_multipliers(segments, ns, size);
-    if (gpu_enabled) install_camera_hook(segments, ns, size);
-    if (gpu_enabled) install_graphics(segments, ns, size);
-    if (gpu_enabled) install_auto_qte_hooks(segments, ns, size, install_qte_hooks(segments, ns, size));
-    if (gpu_enabled) install_switch_hooks(segments, ns, size);
+    if (gpu_enabled && test_hooks) install_actor_watch(segments, ns, size);
+    if (gpu_enabled && test_hooks) install_player_hook(segments, ns, size);
+    if (gpu_enabled && test_hooks) install_wall_seam_fix(segments, ns, size);
+    if (gpu_enabled && test_hooks) install_stat_multipliers(segments, ns, size);
+    if (gpu_enabled && test_hooks) install_camera_hook(segments, ns, size);
+    if (gpu_enabled && test_hooks) install_graphics(segments, ns, size);
+    if (gpu_enabled && test_hooks) install_auto_qte_hooks(segments, ns, size, install_qte_hooks(segments, ns, size));
+    if (gpu_enabled && test_hooks) install_switch_hooks(segments, ns, size);
     if (gpu_enabled && pause_menu && app0) install_menu_exit(segments, ns, size, pause_menu);
 #ifdef _WIN32
     printf("Guest TCB loads redirected to the TEB TLS slot: %" PRIu64 "\n", patch_tcb_loads(segments, ns));
