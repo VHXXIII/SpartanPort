@@ -1249,6 +1249,15 @@ bool TemporalUpscaler::RecordXess(vk::CommandBuffer cmdbuf, const XessInputs& in
     return ok;
 }
 
+// GPU profile (SPARTAN_GPU_PROFILE): a label for what the next commands cost, so a log shows where the
+// scene TAA spends its time instead of one total.
+static void ProfileStep(const char* label) {
+    if (auto* profiler = GpuProfiler::Get()) {
+        profiler->Mark(0xF5A0'0000ull ^ std::hash<std::string_view>{}(label),
+                       [label] { return std::string{label}; });
+    }
+}
+
 void TemporalUpscaler::RecordTaa(vk::CommandBuffer cmdbuf, vk::ImageView color,
                                 vk::ImageView depth, const XessInputs* xess_inputs) {
     // XeSS in place of the accumulation: it writes the result into output_view and has its own
@@ -1378,6 +1387,7 @@ void TemporalUpscaler::RecordTaa(vk::CommandBuffer cmdbuf, vk::ImageView color,
                   (SpartanToggle::Disabled(SpartanToggle::TaaVariance) ? 4u << 8 : 0u) |
                   (SpartanToggle::Disabled(SpartanToggle::TaaFilter) ? 8u << 8 : 0u) |
                   (SpartanToggle::Disabled(SpartanToggle::TaaKeepNearerHistory) ? 16u << 8 : 0u);
+    ProfileStep("upscaler TAA: resolve");
     cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, *taa_pipeline);
     if (params.pad & 0xffu) {
         static u32 diagnostic_frames = 0;
@@ -1414,6 +1424,7 @@ void TemporalUpscaler::RecordTaa(vk::CommandBuffer cmdbuf, vk::ImageView color,
         for (u32 i = 0; i < sharpen_writes.size(); ++i)
             sharpen_writes[i] = {.dstBinding = i, .descriptorCount = 1,
                 .descriptorType = vk::DescriptorType::eStorageImage, .pImageInfo = &sharpen_infos[i]};
+        ProfileStep("upscaler TAA: sharpen");
         cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, *taa_sharpen_pipeline);
         cmdbuf.pushDescriptorSetKHR(vk::PipelineBindPoint::eCompute,
                                     *taa_sharpen_pipeline_layout, 0, sharpen_writes);
@@ -2035,6 +2046,7 @@ void TemporalUpscaler::RunSceneTaa() {
                 vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderWrite);
     own_barrier(vk::Image(output_image), vk::ImageLayout::eUndefined, all,
                 vk::AccessFlagBits2::eNone, vk::ImageLayout::eGeneral, all, rw);
+    ProfileStep("upscaler TAA: motion vectors");
     camera_motion.RecordMotionVp(cmdbuf, depth_view, *motion_view, w, h);
     own_barrier(vk::Image(motion_image), vk::ImageLayout::eGeneral,
                 vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderWrite,
@@ -2074,6 +2086,7 @@ void TemporalUpscaler::RunSceneTaa() {
     own_barrier(vk::Image(output_image), vk::ImageLayout::eGeneral, all, rw,
                 vk::ImageLayout::eGeneral, vk::PipelineStageFlagBits2::eComputeShader,
                 vk::AccessFlagBits2::eShaderRead | vk::AccessFlagBits2::eShaderWrite);
+    ProfileStep("upscaler TAA: alpha and write back");
     {
         const vk::DescriptorImageInfo scene_info{.sampler = *taa_sampler, .imageView = color_view,
                                                  .imageLayout = vk::ImageLayout::eGeneral};

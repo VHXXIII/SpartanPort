@@ -30,25 +30,17 @@ vec4 fetchLinear(sampler2D tex, vec2 position) {
                    texelFetch(tex, clamp(p + ivec2(1,1), ivec2(0), bound), 0), f.x), f.y);
 }
 
-// Catmull-Rom (4x4 taps) history sample: bilinear resampling of the history every frame blurs a
-// moving picture; this keeps it sharp. `position`: continuous history pixel coordinates.
-vec3 bicubicSample(sampler2D tex, vec2 position, ivec2 size) {
-    vec2 floored = floor(position);
-    vec2 f = position - floored;
+// Catmull-Rom weights for the 4x4 taps around a continuous position (`f`: its fraction). Bilinear
+// resampling of the history every frame blurs a moving picture; this keeps it sharp. The taps are
+// read once in the passes below and shared with the other users of the same texels.
+void catmullRomWeights(vec2 f, out float wx[4], out float wy[4]) {
     vec2 f2 = f * f, f3 = f2 * f;
     vec2 w0 = -0.5 * f3 + f2 - 0.5 * f;
     vec2 w1 = 1.5 * f3 - 2.5 * f2 + 1.0;
     vec2 w2 = -1.5 * f3 + 2.0 * f2 + 0.5 * f;
     vec2 w3 = 0.5 * f3 - 0.5 * f2;
-    float wx[4] = float[4](w0.x, w1.x, w2.x, w3.x);
-    float wy[4] = float[4](w0.y, w1.y, w2.y, w3.y);
-    ivec2 base = ivec2(floored) - 1;
-    vec3 sum = vec3(0.0);
-    for (int y = 0; y < 4; ++y)
-        for (int x = 0; x < 4; ++x)
-            sum += texelFetch(tex, clamp(base + ivec2(x, y), ivec2(0), size - 1), 0).rgb *
-                   (wx[x] * wy[y]);
-    return max(sum, vec3(0.0));
+    wx = float[4](w0.x, w1.x, w2.x, w3.x);
+    wy = float[4](w0.y, w1.y, w2.y, w3.y);
 }
 
 // Compare depths in the SAME camera, with tolerance proportional to view distance.
@@ -123,38 +115,58 @@ void main() {
     float filter_weight = 0.0;
     // Luma of the eight neighbours of the source pixel (tonemapped), for the sparkle filter.
     float hi1 = -1.0, hi2 = -1.0, lo1 = 1e9, lo2 = 1e9, nsum = 0.0, nsum2 = 0.0;
-    for (int y = -1; y <= 1; ++y)
-        for (int x = -1; x <= 1; ++x) {
-            ivec2 q = clamp(color_source + ivec2(x,y), ivec2(0), size - 1);
-            vec3 c = texelFetch(color_tex, q, 0).rgb;
+    const bool use_filter = (variant & 8u) != 0u;
+    const bool use_bicubic = ldr && !use_filter && (variant & 64u) == 0u;
+    // One pass over the 4x4 block of the Catmull-Rom resampling. The 3x3 neighbourhood of
+    // color_source lies inside it (the jitter is within half a pixel), so every texel is read once.
+    const ivec2 cbase = ivec2(floor(current_pos)) - 1;
+    const ivec2 win = clamp(color_source - 1 - cbase, ivec2(0), ivec2(1)); // where the 3x3 starts
+    float cwx[4], cwy[4];
+    catmullRomWeights(current_pos - floor(current_pos), cwx, cwy);
+    vec3 bicubic_sum = vec3(0.0);
+    float tl[16]; // tonemapped luma of the block
+    for (int fy = 0; fy < 4; ++fy)
+        for (int fx = 0; fx < 4; ++fx) {
+            vec3 c = texelFetch(color_tex, clamp(cbase + ivec2(fx, fy), ivec2(0), size - 1), 0).rgb;
+            bicubic_sum += c * (cwx[fx] * cwy[fy]);
             if (any(isnan(c)) || any(isinf(c))) c = vec3(0.0);
-            rgb_lo = min(rgb_lo, c);
-            rgb_hi = max(rgb_hi, c);
-            vec2 d = vec2(color_source + ivec2(x,y)) - current_pos;
-            float w = exp(-2.29 * dot(d, d));
-            vec3 t = tonemap(c);
-            filtered += t * w;
-            filter_weight += w;
-            if (x != 0 || y != 0) {
-                const float l = luma(t);
-                nsum += l;
-                nsum2 += l * l;
-                if (l > hi1) { hi2 = hi1; hi1 = l; } else if (l > hi2) { hi2 = l; }
-                if (l < lo1) { lo2 = lo1; lo1 = l; } else if (l < lo2) { lo2 = l; }
+            const vec3 t = tonemap(c);
+            const float l = luma(t);
+            tl[fy * 4 + fx] = l;
+            const ivec2 rel = ivec2(fx, fy) - win; // position in the 3x3
+            if (all(greaterThanEqual(rel, ivec2(0))) && all(lessThanEqual(rel, ivec2(2)))) {
+                rgb_lo = min(rgb_lo, c);
+                rgb_hi = max(rgb_hi, c);
+                if (use_filter) {
+                    vec2 d = vec2(cbase + ivec2(fx, fy)) - current_pos;
+                    float w = exp(-2.29 * dot(d, d));
+                    filtered += t * w;
+                    filter_weight += w;
+                }
+                if (rel != ivec2(1)) {
+                    nsum += l;
+                    nsum2 += l * l;
+                    if (l > hi1) { hi2 = hi1; hi1 = l; } else if (l > hi2) { hi2 = l; }
+                    if (l < lo1) { lo2 = lo1; lo1 = l; } else if (l < lo2) { lo2 = l; }
+                }
+                vec3 s = toYCoCg(t);
+                moment1 += s;
+                moment2 += s * s;
+                lo = min(lo, s);
+                hi = max(hi, s);
             }
-            vec3 s = toYCoCg(t);
-            moment1 += s;
-            moment2 += s * s;
-            lo = min(lo, s);
-            hi = max(hi, s);
         }
-    vec3 current = (variant & 8u) != 0u ? untonemap(filtered / filter_weight)
-                                         : fetchLinear(color_tex, current_pos).rgb;
-    if (ldr && (variant & 8u) == 0u && (variant & 64u) == 0u) {
-        // Catmull-Rom instead of bilinear to undo the jitter: the bilinear one softens the picture
-        // by half a pixel every frame; the neighbourhood box keeps the overshoot in check.
-        current = clamp(bicubicSample(color_tex, current_pos, size), rgb_lo, rgb_hi);
-    }
+    // Tonemapped luma of the 3x3 (the dynamic-object test and the edge smoothing use it again).
+    float cw[9];
+    for (int b = 0; b < 3; ++b)
+        for (int a = 0; a < 3; ++a)
+            cw[b * 3 + a] = win.y == 0 ? (win.x == 0 ? tl[b * 4 + a] : tl[b * 4 + a + 1])
+                                       : (win.x == 0 ? tl[(b + 1) * 4 + a] : tl[(b + 1) * 4 + a + 1]);
+    // Catmull-Rom instead of bilinear to undo the jitter: the bilinear one softens the picture
+    // by half a pixel every frame; the neighbourhood box keeps the overshoot in check.
+    vec3 current = use_bicubic ? clamp(max(bicubic_sum, vec3(0.0)), rgb_lo, rgb_hi)
+                 : use_filter ? untonemap(filtered / filter_weight)
+                              : fetchLinear(color_tex, current_pos).rgb;
     // Sparkle filter, 0-2 (0-200%): up to 1 it pulls a pixel no neighbour shares towards the second
     // brightest / darkest neighbour; 1-2 also limits it to the neighbours' mean +- k sigma (k from 3
     // down to 1.2), so a glint of several pixels is cut too. Detail hold, 0-1 (below, `flick`): holds
@@ -192,6 +204,7 @@ void main() {
     // alternate with background under jitter; a 3x3 nearest surface remains trackable.
     for (int y = -1; y <= 1; ++y)
         for (int x = -1; x <= 1; ++x) {
+            if (x == 0 && y == 0) continue; // the centre is where `depth` started
             ivec2 candidate = clamp(color_source+ivec2(x,y),ivec2(0),size-1);
             float candidate_depth = texelFetch(depth_tex,candidate,0).r;
             if (candidate_depth < depth) {
@@ -234,10 +247,31 @@ void main() {
             vec3 history_rgb = vec3(0.0);
             float coverage = 0.0;
             float threshold = max(2e-7, abs(prev_proj.z - expected_depth) * 0.02);
-            for (int y = 0; y < 2; ++y)
-                for (int x = 0; x < 2; ++x) {
+            // One pass over the 4x4 block around the motion-displaced position: the 2x2 taps that are
+            // validated, the Catmull-Rom footprint, and the 3x3 patch of the dynamic-object test all lie
+            // inside it, so every history texel is read once.
+            const bool want_dyn = ldr && (variant & 128u) == 0u;
+            vec2 hist_position = vec2(base) + fraction;
+            float hwx[4], hwy[4];
+            catmullRomWeights(hist_position - floor(hist_position), hwx, hwy);
+            vec3 sharp_sum = vec3(0.0);
+            float hl[16];      // tonemapped luma of the block
+            uint fired_bits = 0u; // sign of the history alpha (a mover was detected there last frame)
+            for (int fy = 0; fy < 4; ++fy)
+                for (int fx = 0; fx < 4; ++fx) {
                     vec4 tap = texelFetch(history_tex,
-                        clamp(base + ivec2(x,y), ivec2(0), size - 1), 0);
+                        clamp(base + ivec2(fx - 1, fy - 1), ivec2(0), size - 1), 0);
+                    sharp_sum += tap.rgb * (hwx[fx] * hwy[fy]);
+                    if (want_dyn) {
+                        hl[fy * 4 + fx] = luma(tonemap(tap.rgb));
+                        fired_bits |= (floatBitsToUint(tap.a) >> 31) << uint(fy * 4 + fx);
+                    }
+                    if (fx < 1 || fx > 2 || fy < 1 || fy > 2) continue;
+                    // Validate each bilinear tap separately: interpolating foreground/background
+                    // depth invents a surface and causes history rejection along thin edges.
+                    // Separate the integer pixel from the subpixel motion before interpolation.
+                    // Adding tiny motion to a large coordinate first loses fractional precision.
+                    const int x = fx - 1, y = fy - 1;
                     float w = (x == 0 ? 1.0 - fraction.x : fraction.x) *
                               (y == 0 ? 1.0 - fraction.y : fraction.y);
                     bool same_surface = depth >= 1.0 ? abs(tap.a) >= 1.0 :
@@ -262,7 +296,7 @@ void main() {
                 if (coverage > 0.99 && (variant & 32u) == 0u) {
                     // The 4x4 footprint reaches taps the check above did not look at: a bad value
                     // there keeps the validated bilinear sample.
-                    vec3 sharp_history = bicubicSample(history_tex, vec2(base) + fraction, size);
+                    vec3 sharp_history = max(sharp_sum, vec3(0.0));
                     if (!any(isnan(sharp_history)) && !any(isinf(sharp_history)))
                         diagnostic_sample = sharp_history;
                 }
@@ -299,24 +333,22 @@ void main() {
                     // 3x3 patch of the history differs from the current one far more than jitter
                     // noise makes it differ on a static picture (sim: 0.09 against 0.01 luma);
                     // such pixels trust the history less. Variant bit 128 turns this off.
+                    const ivec2 ro = ivec2(round(fraction)); // where the 3x3 patch starts in the block
                     float diff = 0.0;
-                    for (int y = -1; y <= 1; ++y)
-                        for (int x = -1; x <= 1; ++x) {
-                            vec3 c = tonemap(texelFetch(color_tex, clamp(color_source + ivec2(x, y), ivec2(0), size - 1), 0).rgb);
-                            vec3 h = tonemap(texelFetch(history_tex, clamp(base + ivec2(x, y) + ivec2(round(fraction)), ivec2(0), size - 1), 0).rgb);
-                            diff += abs(luma(c) - luma(h));
+                    for (int b = 0; b < 3; ++b)
+                        for (int a = 0; a < 3; ++a) {
+                            const float h = ro.y == 0 ? (ro.x == 0 ? hl[b * 4 + a] : hl[b * 4 + a + 1])
+                                                      : (ro.x == 0 ? hl[(b + 1) * 4 + a] : hl[(b + 1) * 4 + a + 1]);
+                            diff += abs(cw[b * 3 + a] - h);
                         }
                     float changed = smoothstep(0.04, 0.10, diff / 9.0);
                     dyn_flag = changed >= 0.5;
                     // The jitter makes textured pixels look "changed" now and then (flicker if their
                     // history is dropped then); a real mover changes frame after frame. A pixel with no
                     // changed neighbour in the last frame (the sign of the history alpha) is trusted more.
-                    bool fired_before = false;
-                    ivec2 flag_at = base + ivec2(round(fraction));
-                    for (int fy = -1; fy <= 1 && !fired_before; ++fy)
-                        for (int fx = -1; fx <= 1; ++fx)
-                            if ((floatBitsToUint(texelFetch(history_tex, clamp(flag_at + ivec2(fx, fy), ivec2(0), size - 1), 0).a) >> 31) != 0u)
-                                fired_before = true;
+                    const uint row = 0x7u << uint(ro.x);
+                    const uint patch_bits = (row | (row << 4) | (row << 8)) << uint(4 * ro.y);
+                    const bool fired_before = (fired_bits & patch_bits) != 0u;
                     if (!fired_before) changed *= 0.3;
                     changed *= 1.0 - 0.7 * flick;
                     confidence *= 1.0 - float((pad >> 16) & 0xffu) * 0.01 * changed;
@@ -342,10 +374,7 @@ void main() {
         // time, so smooth its stair-stepped edges from the current picture alone.
         float need = clamp((0.75 - history_weight) / 0.5, 0.0, 1.0);
         if (need > 0.0) {
-            float l[9];
-            for (int y = -1; y <= 1; ++y)
-                for (int x = -1; x <= 1; ++x)
-                    l[(y + 1) * 3 + x + 1] = luma(tonemap(texelFetch(color_tex, clamp(color_source + ivec2(x, y), ivec2(0), size - 1), 0).rgb));
+            float l[9] = cw;
             float gx = (l[2] + 2.0 * l[5] + l[8]) - (l[0] + 2.0 * l[3] + l[6]);
             float gy = (l[6] + 2.0 * l[7] + l[8]) - (l[0] + 2.0 * l[1] + l[2]);
             float mag = length(vec2(gx, gy));
