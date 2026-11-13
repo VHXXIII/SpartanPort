@@ -25,7 +25,8 @@ inline Clock::time_point NextFlipDeadline(Clock::time_point previous,
                                           Clock::time_point submitted,
                                           std::chrono::nanoseconds period) {
     if (period.count() <= 0) return submitted;
-    return (submitted - previous > WakeTolerance(period) ? submitted : previous) + period;
+    // test build: the limiter of windows-v2.7.0-aa-test30 (catch up by at most one period).
+    return std::max(previous + period, submitted - period);
 }
 
 inline void SleepFor(std::chrono::nanoseconds remaining) {
@@ -40,8 +41,7 @@ inline void SleepFor(std::chrono::nanoseconds remaining) {
 
 // A timer can wake early (the Windows fallback to Sleep may), so wait out what remains.
 inline void SleepUntil(Clock::time_point deadline) {
-    for (auto now = Clock::now(); now < deadline; now = Clock::now()) {
-        SleepFor(std::chrono::duration_cast<std::chrono::nanoseconds>(deadline - now));
-    }
+    // test build: the plain sleep of windows-v2.7.0-aa-test30.
+    std::this_thread::sleep_until(deadline);
 }
 } // namespace SpartanFramePacing
