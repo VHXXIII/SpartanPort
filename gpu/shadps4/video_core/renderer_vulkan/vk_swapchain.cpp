@@ -103,8 +103,8 @@ void Swapchain::Create(u32 width_, u32 height_) {
 }
 
 void Swapchain::Recreate(u32 width_, u32 height_) {
-    LOG_DEBUG(Render_Vulkan, "Recreate the swapchain: width={} height={} HDR={}", width_, height_,
-              needs_hdr);
+    LOG_WARNING(Render_Vulkan, "Recreate the swapchain: {}x{} -> {}x{} HDR={}", width, height, width_,
+                height_, needs_hdr);
     Create(width_, height_);
 }
 
@@ -149,6 +149,9 @@ bool Swapchain::AcquireNextImage() {
     case vk::Result::eErrorSurfaceLostKHR:
     case vk::Result::eErrorOutOfDateKHR:
     case vk::Result::eErrorUnknown:
+        // spartanport: which result forces the swapchain to be recreated (each one is a visible hitch).
+        LOG_WARNING(Render_Vulkan, "Swapchain acquire: {} ({}x{})", vk::to_string(result), width,
+                    height);
         needs_recreation = true;
         break;
     default:
@@ -178,6 +181,8 @@ bool Swapchain::Present() {
     auto result = instance.GetPresentQueue().presentKHR(present_info);
     if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR ||
         result == vk::Result::eErrorSurfaceLostKHR) {
+        LOG_WARNING(Render_Vulkan, "Swapchain present: {} ({}x{})", vk::to_string(result), width,
+                    height);
         needs_recreation = true;
     } else {
         ASSERT_MSG(result == vk::Result::eSuccess, "Swapchain presentation failed: {}",
