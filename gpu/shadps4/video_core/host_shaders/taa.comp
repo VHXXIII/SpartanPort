@@ -306,7 +306,9 @@ void main() {
                             vec3 h = tonemap(texelFetch(history_tex, clamp(base + ivec2(x, y) + ivec2(round(fraction)), ivec2(0), size - 1), 0).rgb);
                             diff += abs(luma(c) - luma(h));
                         }
-                    float changed = smoothstep(0.04, 0.10, diff / 9.0);
+                    // Sensitive enough for a slowly moving, softly shaded surface (sim: its interior error at a
+                    // 99 % history falls from 11.4 to 6.3 /255, a still picture and a pan are unchanged).
+                    float changed = smoothstep(0.01, 0.05, diff / 9.0);
                     dyn_flag = changed >= 0.5;
                     // The jitter makes textured pixels look "changed" now and then (flicker if their
                     // history is dropped then); a real mover changes frame after frame. A pixel with no
