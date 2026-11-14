@@ -155,7 +155,7 @@ struct Values {
     /// taa_tolerance: width of the colour range the history is clipped to; taa_objects: how much
     /// history a changed patch (a moving object without motion vectors) loses; taa_sharpen: sharpening
     /// after the accumulation.
-    std::atomic<int> taa_static{99}, taa_moving{55}, taa_tolerance{175}, taa_objects{55}, taa_sharpen{130};
+    std::atomic<int> taa_static{99}, taa_moving{55}, taa_tolerance{175}, taa_objects{55}, taa_sharpen{140};
     /// Texture detail of the scene's materials: a negative mip bias of taa_lod / 100 levels, which the
     /// accumulation (jitter) turns into detail instead of shimmer (the usual TAA texture bias).
     /// Default 0: a negative bias sharpens, but it also makes textures shimmer (tested on a GTX 1070 Ti).
@@ -164,10 +164,10 @@ struct Values {
     std::atomic<int> taa_lod{0};
     /// Edge smoothing of the pixels whose history was refused (moving characters): percent.
     std::atomic<int> taa_spatial{55};
-    /// Sparkle filter (percent, 0 = off, up to 200): an isolated bright or dark pixel (a specular glint
+    /// Sparkle filter (percent, 0 = off, up to 200; default 200): an isolated bright or dark pixel (a specular glint
     /// on metal, a chain link) is pulled towards its neighbours before it enters the history; above
     /// 100 a pixel is also limited to its neighbours' spread. Without it such pixels flicker.
-    std::atomic<int> taa_sparkle{0};
+    std::atomic<int> taa_sparkle{200};
     /// Detail hold (percent, 0 = off): more history on high-contrast fine detail (chains, grates, far
     /// textures); a risk of faint trails behind moving characters.
     std::atomic<int> taa_hold{0};

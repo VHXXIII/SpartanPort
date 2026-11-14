@@ -628,7 +628,7 @@ void ImageTab() {
             SliderRow("Sparkle filter", s.taa_sparkle, 0, 200, "%d%%",
                       "Tames isolated bright or dark pixels (specular glints on metal, chain links) before they "
                       "enter the history; they would otherwise flicker. Above 100% a pixel is also held to its "
-                      "neighbours' spread. Higher: calmer metal, weaker fine glints. 0% = off. Default 0%.");
+                      "neighbours' spread. Higher: calmer metal, weaker fine glints. 0% = off. Default 200%.");
             SliderRow("Detail hold", s.taa_hold, 0, 100, "%d%%",
                       "Holds more history on high-contrast fine detail (chains, grates, far textures) so it "
                       "flickers less. A risk of faint trails behind moving characters. 0% = off. Default 0%.");
@@ -636,7 +636,7 @@ void ImageTab() {
                      "Shows where the history is used: red = rejected by depth, green = lost to colour "
                      "change, blue = history weight used. For bug reports; not saved.");
             SliderRow("TAA sharpening", s.taa_sharpen, 0, 200, "%d%%",
-                      "Sharpening after the accumulation, separate from the Sharpening (RCAS) switch below. 0% = off. Default 130%.");
+                      "Sharpening after the accumulation, separate from the Sharpening (RCAS) switch below. 0% = off. Default 140%.");
             ImGui::EndTable();
         }
     }

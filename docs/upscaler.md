@@ -390,7 +390,7 @@ skipping screen-space passes (3 or 4 indices) so a shifted full-screen quad leav
   depth, 25 8-bit scene, 26-31 spatial smoothing.
 - Texture detail goes below 0 (down to -300): a positive mip bias, softer textures, for far sharp
   textures that flicker (a tester found -200 calmer with little visible loss). Live, like the rest.
-- Sparkle filter (`taa_sparkle`, 0-200%, default off): the glint of a specular highlight on metal (chain
+- Sparkle filter (`taa_sparkle`, 0-200%, default 200%): the glint of a specular highlight on metal (chain
   links, armour) is often one pixel that no neighbour shares, and with every jitter phase it is there
   or not. `taa.comp` compares the current tonemapped luma with the second brightest and second
   darkest of the eight neighbours of the source pixel: a pixel outside that range is pulled towards
@@ -406,7 +406,7 @@ skipping screen-space passes (3 or 4 indices) so a shifted full-screen quad leav
   it is its own slider now. Both values travel in the `reset_history` push constant (bit 0 stays "no
   history"; bits 8-15 sparkle in half percent, bits 16-23 hold).
 - Defaults (tuned in game on a GTX 1070 Ti): history 99% still / 55% moving, tolerance 175%,
-  moving objects 55%, edges 55%, texture detail 0% (a negative mip bias sharpens but makes textures shimmer; 80% was the default before and looked worse), sharpening 130%. They live in
+  moving objects 55%, edges 55%, texture detail 0% (a negative mip bias sharpens but makes textures shimmer; 80% was the default before and looked worse), sharpening 140%, sparkle filter 200%. They live in
   `shim/spartanport_settings.h` and in the menu hints.
 
 ### XeSS in place of the accumulation (upscaler "XeSS", ini `upscaler=xess`, Windows only)
