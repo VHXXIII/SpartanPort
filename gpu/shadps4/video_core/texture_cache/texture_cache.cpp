@@ -730,7 +730,7 @@ ImageId TextureCache::ResolveDepthOverlap(const ImageInfo& requested_info, Bindi
 
     // If an image in the cache has less slices we need to expand it
     // spartanport: recreate if either dimension is too small for the requested subresources.
-    bool recreate = !cache_image.info.resources.Contains(requested_info.resources);
+    bool recreate = cache_image.info.resources < requested_info.resources;
 
     switch (binding) {
     case BindingType::Texture:
@@ -896,7 +896,7 @@ std::tuple<ImageId, int, int> TextureCache::ResolveOverlap(const ImageInfo& imag
         // Size and resources are greater, expand the image.
         // spartanport: expand if either dimension is missing, regardless of mip ordering.
         if (image_info.type == cache_image.info.type &&
-            !cache_image.info.resources.Contains(image_info.resources)) {
+            image_info.resources > cache_image.info.resources) {
             return {ExpandImage(image_info, cache_image_id), -1, -1};
         }
 
