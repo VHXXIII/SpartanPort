@@ -86,6 +86,9 @@ TextureCache::TextureCache(const Vulkan::Instance& instance_, Vulkan::Scheduler&
                      critical_gc_memory);
     }
     trigger_gc_memory = static_cast<u64>((device_local_memory - mem_threshold) / 2);
+    // spartanport: on a card below 8 GiB the line above is 0 and the collector ran on every
+    // submission, evicting images unused for 16 ticks and recreating them a moment later.
+    trigger_gc_memory = std::max<u64>(trigger_gc_memory, static_cast<u64>(device_local_memory / 3));
 }
 
 TextureCache::~TextureCache() {
