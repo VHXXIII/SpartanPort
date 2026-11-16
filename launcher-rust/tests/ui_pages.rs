@@ -2918,17 +2918,16 @@ fn game_audio_offers_volume_and_speakers() {
 }
 
 #[test]
-fn graphics_page_offers_spatial_anti_aliasing() {
-    use spartanport_launcher::core::options::ANTI_ALIASING;
+fn performance_offers_60_fps_during_qtes_under_the_engine_rate() {
     let dir = tempfile::tempdir().unwrap();
     let mut state = state(dir.path());
-    open(&mut state, Page::Graphics);
-    page_has(&state, &["Anti-aliasing"]);
-    // Off until chosen, as in the game; FXAA and SMAA are values of one ini key.
-    assert_eq!(state.store.text("anti_aliasing"), "off");
-    for (label, value) in [("FXAA", "fxaa"), ("SMAA", "smaa"), ("Off", "off")] {
-        let pick = select_message("anti_aliasing", ANTI_ALIASING, "en", label).unwrap();
-        let _ = app::update(&mut state, pick);
-        assert_eq!(state.store.text("anti_aliasing"), value);
-    }
+    open(&mut state, Page::Performance);
+    page_has(
+        &state,
+        &["Engine frame rate", "High Frame Rate Physics Fix"],
+    );
+    // On by default, as in the game.
+    assert_eq!(state.store.text("auto_safe_fps"), "1");
+    click_tall(&mut state, "High Frame Rate Physics Fix");
+    assert_eq!(state.store.text("auto_safe_fps"), "0");
 }
