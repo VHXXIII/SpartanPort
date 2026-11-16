@@ -1761,6 +1761,7 @@ void TextureCache::GarbageCollectImages() {
         if (num_deletions == 0 || ++visited > 256) {
             return true;
         }
+        --num_deletions;
         auto& image = slot_images[image_id];
         ResolveReadbacks(image.info.guest_address, image.info.guest_size, true,
                          ReadbackSource::CacheCleanup);
@@ -1787,8 +1788,6 @@ void TextureCache::GarbageCollectImages() {
             lru_cache.Touch(image.lru_id, gc_tick);
             return false;
         }
-        // spartanport: only actual evictions spend the deletion budget.
-        --num_deletions;
         if (download) {
             // spartanport: synchronously, while the image still protects its pages. A deferred
             // write-back landed after FreeImage had unprotected them, over whatever the game
