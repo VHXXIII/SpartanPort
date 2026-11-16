@@ -57,7 +57,7 @@ public:
     void ForEachItemBelow(TickType tick, Func&& func) {
         // spartanport: inspect the callback's result type so a spent budget stops the walk.
         static constexpr bool RETURNS_BOOL =
-            std::is_same_v<std::invoke_result_t<Func, ObjectType>, bool>;
+            std::is_same_v<std::invoke_result<Func, ObjectType>, bool>;
         Item* iterator = first_item;
         while (iterator) {
             if (static_cast<s64>(tick) - static_cast<s64>(iterator->tick) < 0) {
