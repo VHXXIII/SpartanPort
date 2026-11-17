@@ -23,6 +23,7 @@
 #include "video_core/host_shaders/ldr_alpha_comp.h"
 #include "video_core/host_shaders/stencil_reactive_comp.h"
 #include "video_core/host_shaders/motion_mask_comp.h"
+#include "video_core/host_shaders/sparkle_filter_comp.h"
 #include "video_core/host_shaders/taa_comp.h"
 #include "video_core/host_shaders/taa_sharpen_comp.h"
 #include "video_core/host_shaders/taa_sharpen_ldr_comp.h"
@@ -562,6 +563,71 @@ bool TemporalUpscaler::RecordStencilReactive(vk::CommandBuffer cmdbuf, VideoCore
     return true;
 }
 
+bool TemporalUpscaler::RecordSparkle(vk::CommandBuffer cmdbuf, VideoCore::Image& color, bool linear,
+                                     u32 w, u32 h, float amount) {
+    // The TAA's sparkle filter on this frame before FSR sees it: filtered into sparkle_image (the
+    // scene colour's own bytes, sRGB encoded when the view decodes), then copied back over the scene
+    // colour, which FSR reads as before.
+    if (amount <= 0.0f || !sparkle_pipeline || !sparkle_image || w != pass_width ||
+        h != pass_height ||
+        !(color.usage_flags & vk::ImageUsageFlagBits::eTransferDst)) {
+        return false;
+    }
+    const auto all = vk::PipelineStageFlagBits2::eAllCommands;
+    const auto raw_barrier = [&](vk::Image image, vk::ImageLayout old_layout,
+                                 vk::PipelineStageFlags2 src_stage, vk::AccessFlags2 src_access,
+                                 vk::PipelineStageFlags2 dst_stage, vk::AccessFlags2 dst_access) {
+        const vk::ImageMemoryBarrier2 b{
+            .srcStageMask = src_stage, .srcAccessMask = src_access,
+            .dstStageMask = dst_stage, .dstAccessMask = dst_access,
+            .oldLayout = old_layout, .newLayout = vk::ImageLayout::eGeneral,
+            .image = image,
+            .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1},
+        };
+        cmdbuf.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &b});
+    };
+    raw_barrier(vk::Image(sparkle_image), vk::ImageLayout::eUndefined, all, vk::AccessFlagBits2::eNone,
+                vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderStorageWrite);
+    const auto color_view = CachedView(color, color.info.pixel_format, vk::ImageAspectFlagBits::eColor);
+    const vk::DescriptorImageInfo color_info{.sampler = *motion_mask_sampler, .imageView = color_view,
+                                             .imageLayout = vk::ImageLayout::eGeneral};
+    const vk::DescriptorImageInfo out_info{.imageView = *sparkle_view,
+                                           .imageLayout = vk::ImageLayout::eGeneral};
+    const std::array<vk::WriteDescriptorSet, 2> writes{{
+        {.dstBinding = 0, .descriptorCount = 1,
+         .descriptorType = vk::DescriptorType::eCombinedImageSampler, .pImageInfo = &color_info},
+        {.dstBinding = 1, .descriptorCount = 1,
+         .descriptorType = vk::DescriptorType::eStorageImage, .pImageInfo = &out_info},
+    }};
+    struct Push {
+        float sparkle;
+        u32 flags;
+    } push{std::clamp(amount, 0.0f, 2.0f), linear ? 1u : 0u};
+    cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, *sparkle_pipeline);
+    cmdbuf.pushDescriptorSetKHR(vk::PipelineBindPoint::eCompute, *sparkle_pipeline_layout, 0, writes);
+    cmdbuf.pushConstants(*sparkle_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(push),
+                         &push);
+    cmdbuf.dispatch((w + 7) / 8, (h + 7) / 8, 1);
+    raw_barrier(vk::Image(sparkle_image), vk::ImageLayout::eGeneral,
+                vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderStorageWrite,
+                vk::PipelineStageFlagBits2::eCopy, vk::AccessFlagBits2::eTransferRead);
+    // The copy needs the scene colour as a transfer target (its compute reads are done).
+    runtime.Transit(&color, vk::ImageLayout::eGeneral, vk::PipelineStageFlagBits2::eCopy,
+                    vk::AccessFlagBits2::eTransferWrite);
+    runtime.FlushBarriers();
+    const vk::ImageCopy region{
+        .srcSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
+        .dstSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
+        .extent = {w, h, 1},
+    };
+    cmdbuf.copyImage(vk::Image(sparkle_image), vk::ImageLayout::eGeneral, color.GetImage(),
+                     vk::ImageLayout::eGeneral, region);
+    runtime.Transit(&color, vk::ImageLayout::eGeneral, vk::PipelineStageFlagBits2::eComputeShader,
+                    vk::AccessFlagBits2::eShaderRead);
+    runtime.FlushBarriers();
+    return true;
+}
+
 bool TemporalUpscaler::RecordMotionMask(vk::CommandBuffer cmdbuf, vk::ImageView color, bool linear,
                                         bool combine, u32 w, u32 h, float strength) {
     // What moved without a motion vector (characters, animated objects): the 3x3 patch of the frame
@@ -569,7 +635,7 @@ bool TemporalUpscaler::RecordMotionMask(vk::CommandBuffer cmdbuf, vk::ImageView 
     // does, written into the reactive mask next to the stencil's. Strength 0 leaves everything alone and
     // drops the reference (it would be stale when the slider comes back).
     if (strength <= 0.0f || !color || !motion_mask_pipeline || !mask_ref[0] || !mask_ref[1] ||
-        w != width || h != height) {
+        w != pass_width || h != pass_height) {
         mask_ref_valid = false;
         return false;
     }
@@ -717,6 +783,11 @@ void TemporalUpscaler::RunLdr() {
     }
     last_frame = now;
 
+    if (SpartanSettings::Get().upscaler == SpartanSettings::UpscalerFsr3Ui && !UseFsr4()) {
+        // The TAA's sparkle filter on the frame before FSR (0 = off).
+        RecordSparkle(cmdbuf, color, color.info.pixel_format == vk::Format::eR8G8B8A8Srgb, w, h,
+                      float(SpartanSettings::Get().fsr_sparkle.load()) / 100.0f);
+    }
     bool stencil_mask =
         !UseFsr4() && (RecordStencilReactive(cmdbuf, depth, depth_format, w, h) ||
                        (mask_ready && ReactiveOn()));
@@ -788,7 +859,7 @@ void TemporalUpscaler::RunLdr() {
         info.cameraVerticalFovRadians = camera_motion.VerticalFov();
         info.viewSpaceToMeters = 1.0f;
         info.sharpness = UpscalerSharpness();
-        info.enableSharpening = SharpenOn() ? VK_TRUE : VK_FALSE;
+        info.enableSharpening = FsrRcasOn() ? VK_TRUE : VK_FALSE;
         info.reset = reset ? VK_TRUE : VK_FALSE;
         info.frameId = frame_id++;
         FfxVkPortableUpscaleCreateInfo create_info{};
@@ -863,6 +934,16 @@ float TemporalUpscaler::UpscalerSharpness() const {
     // 0.3, 100% the strongest; below 75% it fades to 0. SPARTAN_FSR_SHARPNESS no longer sets it.
     const float strength = std::clamp(SpartanSettings::Get().rcas_strength.load() / 100.0f, 0.0f, 1.0f);
     return strength <= 0.75f ? strength / 0.75f * 0.3f : 0.3f + (strength - 0.75f) / 0.25f * 0.7f;
+}
+
+bool TemporalUpscaler::FsrRcasOn() const {
+    // FSR 3.1 with native HUD sharpens with the TAA's pass (bounded, no halo on an edge) when its
+    // Sharpening slider is above 0; FSR's own RCAS, whose extra strength draws halos, is then left off.
+    const auto& settings = SpartanSettings::Get();
+    if (settings.upscaler == SpartanSettings::UpscalerFsr3Ui && settings.fsr_sharpen.load() > 0) {
+        return false;
+    }
+    return SharpenOn();
 }
 
 bool TemporalUpscaler::SharpenOn() const {
@@ -1127,12 +1208,16 @@ bool TemporalUpscaler::EnsureResources(u32 w, u32 h, u32 ow, u32 oh, bool hdr) {
                    vk::ImageUsageFlagBits::eTransferSrc);
     make_image(reactive_image, reactive_view, vk::Format::eR8Unorm,
                vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled);
+    make_image(sparkle_image, sparkle_view, vk::Format::eR8G8B8A8Unorm,
+               vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc);
     for (u32 i = 0; i < mask_ref.size(); ++i) {
         make_image(mask_ref[i], mask_ref_views[i], vk::Format::eR16Sfloat,
                    vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled);
     }
     mask_ref_valid = false;
     mask_ref_next = 0;
+    pass_width = w;
+    pass_height = h;
     for (u32 i = 0; i < taa_history.size(); ++i) {
         taa_history_views[i].reset();
         taa_history[i] = VideoCore::UniqueImage{};
@@ -1261,6 +1346,28 @@ void TemporalUpscaler::CreatePipelines() {
         }));
     }
     stencil_reactive_pipeline = compute(STENCIL_REACTIVE_COMP, *stencil_reactive_pipeline_layout);
+    {
+        // Sparkle filter: the scene colour (sampled) into a storage RGBA8 copy.
+        std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
+        for (u32 i = 0; i < bindings.size(); ++i) {
+            bindings[i] = {.binding = i,
+                .descriptorType = i == 0 ? vk::DescriptorType::eCombinedImageSampler
+                                         : vk::DescriptorType::eStorageImage,
+                .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eCompute};
+        }
+        sparkle_desc_layout = Check(device.createDescriptorSetLayoutUnique({
+            .flags = vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR,
+            .bindingCount = u32(bindings.size()),
+            .pBindings = bindings.data(),
+        }));
+        const vk::PushConstantRange push{.stageFlags = vk::ShaderStageFlagBits::eCompute,
+                                         .offset = 0, .size = 2 * sizeof(u32)};
+        sparkle_pipeline_layout = Check(device.createPipelineLayoutUnique({
+            .setLayoutCount = 1, .pSetLayouts = &*sparkle_desc_layout,
+            .pushConstantRangeCount = 1, .pPushConstantRanges = &push,
+        }));
+        sparkle_pipeline = compute(SPARKLE_FILTER_COMP, *sparkle_pipeline_layout);
+    }
     {
         // Motion mask: the scene, the camera motion and the last reference (sampled), the new reference
         // and the reactive mask (storage).
@@ -1583,17 +1690,18 @@ void TemporalUpscaler::ExtraSharpen(vk::CommandBuffer cmdbuf, vk::Image target, 
     }
     if (settings.upscaler == SpartanSettings::UpscalerFsr3Ui) {
         // One line when the FSR 3.1 look settles (the sliders change it every frame while dragged).
-        static std::array<int, 4> logged{-1, -1, -1, -1}, pending{-1, -1, -1, -1};
+        static std::array<int, 5> logged{-1, -1, -1, -1, -1}, pending{-1, -1, -1, -1, -1};
         static u32 stable_frames = 0;
-        const std::array<int, 4> now{settings.fsr_lod.load(), settings.fsr_objects.load(),
-                                     settings.fsr_motion.load(), settings.fsr_sharpen.load()};
+        const std::array<int, 5> now{settings.fsr_lod.load(), settings.fsr_objects.load(),
+                                     settings.fsr_motion.load(), settings.fsr_sharpen.load(),
+                                     settings.fsr_sparkle.load()};
         if (now != pending) {
             pending = now;
             stable_frames = 0;
         } else if (stable_frames < 12 && ++stable_frames == 12 && pending != logged) {
             logged = pending;
-            std::printf("FSR look: texture detail %d moving objects %d motion detection %d sharpen %d\n",
-                        now[0], now[1], now[2], now[3]);
+            std::printf("FSR look: texture detail %d moving objects %d motion detection %d sharpen %d "
+                        "sparkle %d\n", now[0], now[1], now[2], now[3], now[4]);
         }
     }
     float strength = SharpenOn() ? extra : 0.0f;
@@ -2016,7 +2124,7 @@ void TemporalUpscaler::Run() {
         // RCAS strength 0..1 (menu, SPARTAN_FSR_SHARPNESS); jitter at 1:1 softens the image slightly.
         // AMD's RCAS ends at 1; ExtraSharpen adds the rest of the menu's 0..2.
         info.sharpness = UpscalerSharpness();
-        info.enableSharpening = SharpenOn() ? VK_TRUE : VK_FALSE;
+        info.enableSharpening = FsrRcasOn() ? VK_TRUE : VK_FALSE;
         info.reset = reset ? VK_TRUE : VK_FALSE;
         info.frameId = frame_id++;
     
@@ -2826,7 +2934,7 @@ void TemporalUpscaler::RunScaled() {
     info.cameraVerticalFovRadians = camera_motion.VerticalFov();
     info.viewSpaceToMeters = 1.0f;
     info.sharpness = UpscalerSharpness();
-    info.enableSharpening = SharpenOn() ? VK_TRUE : VK_FALSE;
+    info.enableSharpening = FsrRcasOn() ? VK_TRUE : VK_FALSE;
     info.reset = reset ? VK_TRUE : VK_FALSE;
     info.frameId = frame_id++;
 

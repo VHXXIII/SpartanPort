@@ -180,6 +180,9 @@ struct Values {
     /// (the same detection as the TAA's, motion_mask.comp; 0 = off), and the sharpening after FSR (the
     /// TAA's pass, 0 = off, independent of the RCAS switch), percent, live.
     std::atomic<int> fsr_motion{70}, fsr_sharpen{140};
+    /// FSR 3.1 with native HUD: the TAA's sparkle filter on the frame before FSR (percent, 0 = off, up to
+    /// 200 as taa_sparkle), live.
+    std::atomic<int> fsr_sparkle{100};
     /// TAA debug view (not saved): red = history rejected by depth, green = lost to colour change /
     /// moving-object detection, blue = history weight used.
     std::atomic<bool> taa_debug{false};

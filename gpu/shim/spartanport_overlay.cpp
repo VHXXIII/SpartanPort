@@ -658,6 +658,10 @@ void ImageTab() {
                       "Marks what moved without a motion vector (characters, animated objects) by comparing "
                       "the picture with the last frames, and tells FSR to trust its history less there. "
                       "Higher: fewer trails behind them, rougher edges. 0% = off. Default 70%.");
+            SliderRow("Sparkle filter", s.fsr_sparkle, 0, 200, "%d%%",
+                      "Calms single bright or dark pixels that no neighbour shares (glints on edges, metal, "
+                      "far textures) before FSR sees the frame, as the TAA's sparkle filter does. "
+                      "Above 100% it also limits groups of pixels. 0% = off. Default 100%.");
             SliderRow("Sharpening", s.fsr_sharpen, 0, 200, "%d%%",
                       "Sharpening after FSR (the TAA's pass), separate from the Sharpening (RCAS) switch "
                       "below. 0% = off. Default 140%.");

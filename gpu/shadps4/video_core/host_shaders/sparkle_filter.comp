@@ -1,0 +1,76 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// spartanport: the TAA's sparkle filter (taa.comp) as a pass ahead of an upscaler that has no such
+// control (FSR 3.1). It looks at one frame only: a pixel no neighbour shares (a glint on a wet edge,
+// metal, a far texture under jitter) is pulled towards the second brightest / darkest of its eight
+// neighbours, and at the top of the range also limited to their mean +- k sigma, so the upscaler's
+// history is not fed flickering highlights. The result goes into a copy of the scene colour.
+#version 450
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(binding = 0) uniform sampler2D color_tex;
+layout(binding = 1, rgba8) uniform writeonly image2D filtered;
+
+layout(push_constant) uniform Params {
+    float sparkle; // 0..2 as the TAA's: up to 1 the neighbour rule, 1..2 also the mean +- k sigma limit
+    uint flags;    // bit 0: the view is sRGB (linear values): written back sRGB encoded
+};
+
+float luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
+vec3 tonemap(vec3 c) { c = max(c, vec3(0.0)); return c / (1.0 + luma(c)); }
+vec3 untonemap(vec3 c) { return c / max(1.0 - luma(c), 1e-4); }
+
+vec3 encode_srgb(vec3 c) {
+    c = clamp(c, 0.0, 1.0);
+    return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
+}
+
+void main() {
+    const ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    const ivec2 size = imageSize(filtered);
+    if (any(greaterThanEqual(pixel, size))) {
+        return;
+    }
+    const vec4 center = texelFetch(color_tex, pixel, 0);
+    float hi1 = -1.0, hi2 = -1.0, lo1 = 1e9, lo2 = 1e9, nsum = 0.0, nsum2 = 0.0;
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            if (x == 0 && y == 0) {
+                continue;
+            }
+            vec3 c = texelFetch(color_tex, clamp(pixel + ivec2(x, y), ivec2(0), size - 1), 0).rgb;
+            if (any(isnan(c)) || any(isinf(c))) {
+                c = vec3(0.0);
+            }
+            const float l = luma(tonemap(c));
+            nsum += l;
+            nsum2 += l * l;
+            if (l > hi1) { hi2 = hi1; hi1 = l; } else if (l > hi2) { hi2 = l; }
+            if (l < lo1) { lo2 = lo1; lo1 = l; } else if (l < lo2) { lo2 = l; }
+        }
+    }
+    vec3 rgb = center.rgb;
+    const float spark_stat = clamp(sparkle - 1.0, 0.0, 1.0);
+    vec3 t = tonemap(rgb);
+    const float l = luma(t);
+    float bright_limit = hi2, dark_limit = lo2;
+    if (spark_stat > 0.0) {
+        const float mean8 = nsum * 0.125;
+        const float sd8 = sqrt(max(nsum2 * 0.125 - mean8 * mean8, 0.0));
+        const float k = mix(3.0, 1.2, spark_stat);
+        bright_limit = min(hi2, mean8 + k * sd8);
+        dark_limit = max(lo2, mean8 - k * sd8);
+    }
+    const float amount = spark_stat > 0.0 ? 1.0 : min(sparkle, 1.0);
+    if (l > bright_limit) {
+        t *= mix(1.0, bright_limit / max(l, 1e-4), amount);
+        rgb = untonemap(t);
+    } else if (l < dark_limit) {
+        t += vec3(mix(0.0, dark_limit - l, amount));
+        rgb = untonemap(t);
+    }
+    if ((flags & 1u) != 0u) {
+        rgb = encode_srgb(rgb);
+    }
+    imageStore(filtered, pixel, vec4(clamp(rgb, 0.0, 1.0), center.a));
+}

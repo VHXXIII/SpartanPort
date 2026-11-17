@@ -180,6 +180,8 @@ void Set(Values& v, const std::string& key, const std::string& value) {
         v.fsr_motion = std::clamp(i, 0, 100);
     } else if (key == "fsr_sharpen") {
         v.fsr_sharpen = std::clamp(i, 0, 200);
+    } else if (key == "fsr_sparkle") {
+        v.fsr_sparkle = std::clamp(i, 0, 200);
     } else if (key == "xess_motion") {
         v.xess_motion = std::clamp(i, 0, 100);
     } else if (key == "taa_sharpen") {
@@ -571,8 +573,9 @@ void Save() {
                  v.taa_static.load(), v.taa_moving.load(), v.taa_tolerance.load(), v.taa_objects.load(),
                  v.taa_sharpen.load(), v.taa_lod.load(), v.taa_spatial.load(),
                  v.taa_sparkle.load(), v.taa_hold.load());
-    std::fprintf(file, "fsr_lod=%d\nfsr_objects=%d\nfsr_motion=%d\nfsr_sharpen=%d\n", v.fsr_lod.load(),
-                 v.fsr_objects.load(), v.fsr_motion.load(), v.fsr_sharpen.load());
+    std::fprintf(file, "fsr_lod=%d\nfsr_objects=%d\nfsr_motion=%d\nfsr_sharpen=%d\nfsr_sparkle=%d\n",
+                 v.fsr_lod.load(), v.fsr_objects.load(), v.fsr_motion.load(), v.fsr_sharpen.load(),
+                 v.fsr_sparkle.load());
     std::fprintf(file, "xess_objects=%d\nxess_motion=%d\nxess_sharpen=%d\n", v.xess_objects.load(),
                  v.xess_motion.load(), v.xess_sharpen.load());
     std::fprintf(file, "anti_aliasing=%s\n",

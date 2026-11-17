@@ -54,7 +54,10 @@ strength, and the extra pass above FSR's maximum); FSR 3.1, FSR 4 and FSR 4.1 ke
 (`sharpen`, `sharpness`). Switching between a patched and a live-path upscaler needs a restart.
 The same moving object detection as XeSS's (`fsr_motion`, default 70%, 0 = off) is added to the reactive
 mask there, and the TAA's sharpening pass has its own slider (`fsr_sharpen`, default 140%, independent of the
-RCAS switch, which keeps working beneath it). The Insert menu (Image tab) has an "FSR 3.1 look" section for it: Texture detail (`fsr_lod`, a negative
+RCAS switch). While that slider is above 0 FSR's own RCAS is left off (its extra strength draws halos on
+edges; the TAA's pass is bounded). The TAA's sparkle filter runs on the frame before FSR (`fsr_sparkle`,
+default 100%, up to 200%, 0 = off): `sparkle_filter.comp` filters a copy of the scene colour and copies it
+back, so FSR's history is not fed single flickering pixels. The Insert menu (Image tab) has an "FSR 3.1 look" section for it: Texture detail (`fsr_lod`, a negative
 mip bias in percent of a level, default 0) and Moving objects (`fsr_objects`, the strength of the
 stencil reactive mask on characters and objects, default 100 = upstream's), both live.
 

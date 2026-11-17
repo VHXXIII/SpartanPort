@@ -81,6 +81,8 @@ public:
     [[nodiscard]] bool SceneTaa() const;
     /// The upscaler's own sharpening is on (launcher setting and the menu's RCAS switch).
     [[nodiscard]] bool SharpenOn() const;
+    /// FSR's own RCAS: off for the native-HUD FSR 3.1 when its Sharpening slider (our bounded pass) is on.
+    [[nodiscard]] bool FsrRcasOn() const;
     /// FSR's own sharpness (0..1), from the menu's sharpening strength.
     [[nodiscard]] float UpscalerSharpness() const;
 
@@ -208,6 +210,10 @@ private:
     /// strength is 0 or the pass cannot run (the mask is then not touched).
     bool RecordMotionMask(vk::CommandBuffer cmdbuf, vk::ImageView color, bool linear, bool combine,
                           u32 w, u32 h, float strength);
+    /// The TAA's sparkle filter (sparkle_filter.comp) on the scene colour, in place through
+    /// sparkle_image: false when it is off or cannot run.
+    bool RecordSparkle(vk::CommandBuffer cmdbuf, VideoCore::Image& color, bool linear, u32 w, u32 h,
+                       float amount);
     void RunUiOnly(VideoCore::ImageId color, VideoCore::ImageId depth);
     void EnsureUiResources(u32 width, u32 height, vk::Format color, vk::Format depth);
     void PrepareUiDepth(VideoCore::ImageId depth);
@@ -393,8 +399,14 @@ private:
     vk::UniqueSampler motion_mask_sampler;
     std::array<VideoCore::UniqueImage, 2> mask_ref;      ///< R16F reference luma, ping-pong
     std::array<vk::UniqueImageView, 2> mask_ref_views;
+    u32 pass_width = 0, pass_height = 0; ///< the size EnsureResources made the images at
     u32 mask_ref_next = 0;      ///< the one written this frame
     bool mask_ref_valid = false; ///< the other one holds the previous frame's reference
+    vk::UniqueDescriptorSetLayout sparkle_desc_layout;
+    vk::UniquePipelineLayout sparkle_pipeline_layout;
+    vk::UniquePipeline sparkle_pipeline;
+    VideoCore::UniqueImage sparkle_image; ///< RGBA8 copy of the filtered scene colour
+    vk::UniqueImageView sparkle_view;
     vk::UniqueDescriptorSetLayout merge_desc_layout;
     vk::UniquePipelineLayout merge_pipeline_layout;
     vk::UniquePipeline merge_pipeline;
