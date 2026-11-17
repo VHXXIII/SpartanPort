@@ -93,12 +93,38 @@ Library& GetLibrary() {
         // another libxess.dll could be planted. The library's dependencies are looked for beside it,
         // then in the system folder.
         constexpr DWORD flags = LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32;
+        DWORD strict_error = 0, altered_error = 0;
+        bool altered = false;
         if (!directory.empty()) {
-            lib.module = LoadLibraryExW((directory + L"\\libxess.dll").c_str(), nullptr, flags);
+            const std::wstring paths[2] = {directory + L"\\libxess.dll",
+                                           directory + L"\\bin\\libxess.dll"};
+            for (const auto& path : paths) {
+                lib.module = LoadLibraryExW(path.c_str(), nullptr, flags);
+                if (lib.module) {
+                    break;
+                }
+                strict_error = GetLastError();
+            }
             if (!lib.module) {
-                lib.module = LoadLibraryExW((directory + L"\\bin\\libxess.dll").c_str(), nullptr, flags);
+                // The strict search finds the library's own dependencies (the C++ runtime) only beside
+                // it and in System32. Where they are elsewhere (the game's folder, PATH) the way
+                // before the review still works: the same full path to the library itself, only its
+                // dependencies searched wider. libxess.dll is never looked for by name.
+                for (const auto& path : paths) {
+                    lib.module = LoadLibraryExW(path.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+                    if (lib.module) {
+                        altered = true;
+                        break;
+                    }
+                    altered_error = GetLastError();
+                }
             }
         }
+        // One line in the log: why XeSS could not start is otherwise only "no extensions".
+        std::printf("XeSS: libxess.dll %s (strict search error %lu, wider dependency search error %lu)\n",
+                    lib.module ? (altered ? "loaded with the wider dependency search" : "loaded")
+                               : "NOT loaded",
+                    static_cast<unsigned long>(strict_error), static_cast<unsigned long>(altered_error));
         if (!lib.module) {
             lib.error = "libxess.dll was not found next to the game (Intel's XeSS library)";
             return lib;
@@ -364,14 +390,17 @@ std::vector<const char*> XessAa::DeviceExtensions(vk::Instance instance,
     std::vector<const char*> names;
     const Library& lib = GetLibrary();
     if (!lib.Ok() || !lib.required_extensions) {
+        std::printf("XeSS: the library has no Vulkan entry points (%s)\n",
+                    lib.error.empty() ? "required-extensions function missing" : lib.error.c_str());
         return names;
     }
     uint32_t count = 0;
     const char* const* list = nullptr;
-    if (lib.required_extensions(static_cast<VkInstance>(instance),
-                                static_cast<VkPhysicalDevice>(physical_device), &count,
-                                &list) < 0 ||
-        !list) {
+    const auto result = lib.required_extensions(static_cast<VkInstance>(instance),
+                                                static_cast<VkPhysicalDevice>(physical_device),
+                                                &count, &list);
+    std::printf("XeSS: required device extensions: result %d, %u listed\n", int(result), count);
+    if (result < 0 || !list) {
         return names;
     }
     names.assign(list, list + count);

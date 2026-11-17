@@ -442,6 +442,10 @@ Windows only), the hook is `TemporalUpscaler::RecordXess`.
   search limited to that folder and the system folder (never the current directory or `PATH`). The waits
   for an idle GPU (at the start and when the picture changes size) hold `Scheduler::submit_mutex`, the lock
   the scheduler and the presenter take around `vkQueueSubmit` and `vkQueuePresent`.
+  If that strict load fails (the library's C++ runtime dependencies are not in its folder or System32), the same
+  full path is loaded once more with `LOAD_WITH_ALTERED_SEARCH_PATH`, which only widens where the *dependencies*
+  are looked for. The log says which way it went (`XeSS: libxess.dll ...`) and what the library answered for
+  its required device extensions.
 - The TAA look sliders (history, tolerance, moving objects, edges) do not apply to XeSS, which has its own
   history. Texture detail (`taa_lod`, the rasterizer's mip bias) and the sharpening (`xess_sharpen`, default 140%; the
   `taa_sharpen.comp` pass run over the output image through `SharpenImage`) do, and are logged as
