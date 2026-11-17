@@ -203,6 +203,11 @@ private:
     /// Stencil reactive mask into reactive_image (w x h): false when off or without stencil.
     bool RecordStencilReactive(vk::CommandBuffer cmdbuf, VideoCore::Image& depth, vk::Format depth_format,
                                u32 w, u32 h);
+    /// Reactive mask of what moved without a motion vector (motion_mask.comp), max-combined into
+    /// reactive_image (w x h). `combine`: reactive_image already holds the stencil mask. False when the
+    /// strength is 0 or the pass cannot run (the mask is then not touched).
+    bool RecordMotionMask(vk::CommandBuffer cmdbuf, vk::ImageView color, bool linear, bool combine,
+                          u32 w, u32 h, float strength);
     void RunUiOnly(VideoCore::ImageId color, VideoCore::ImageId depth);
     void EnsureUiResources(u32 width, u32 height, vk::Format color, vk::Format depth);
     void PrepareUiDepth(VideoCore::ImageId depth);
@@ -382,6 +387,14 @@ private:
     vk::UniqueDescriptorSetLayout stencil_reactive_desc_layout;
     vk::UniquePipelineLayout stencil_reactive_pipeline_layout;
     vk::UniquePipeline stencil_reactive_pipeline;
+    vk::UniqueDescriptorSetLayout motion_mask_desc_layout;
+    vk::UniquePipelineLayout motion_mask_pipeline_layout;
+    vk::UniquePipeline motion_mask_pipeline;
+    vk::UniqueSampler motion_mask_sampler;
+    std::array<VideoCore::UniqueImage, 2> mask_ref;      ///< R16F reference luma, ping-pong
+    std::array<vk::UniqueImageView, 2> mask_ref_views;
+    u32 mask_ref_next = 0;      ///< the one written this frame
+    bool mask_ref_valid = false; ///< the other one holds the previous frame's reference
     vk::UniqueDescriptorSetLayout merge_desc_layout;
     vk::UniquePipelineLayout merge_pipeline_layout;
     vk::UniquePipeline merge_pipeline;

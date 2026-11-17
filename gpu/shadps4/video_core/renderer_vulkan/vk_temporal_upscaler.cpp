@@ -22,6 +22,7 @@
 #include "video_core/host_shaders/upscale_reactive_comp.h"
 #include "video_core/host_shaders/ldr_alpha_comp.h"
 #include "video_core/host_shaders/stencil_reactive_comp.h"
+#include "video_core/host_shaders/motion_mask_comp.h"
 #include "video_core/host_shaders/taa_comp.h"
 #include "video_core/host_shaders/taa_sharpen_comp.h"
 #include "video_core/host_shaders/taa_sharpen_ldr_comp.h"
@@ -561,6 +562,91 @@ bool TemporalUpscaler::RecordStencilReactive(vk::CommandBuffer cmdbuf, VideoCore
     return true;
 }
 
+bool TemporalUpscaler::RecordMotionMask(vk::CommandBuffer cmdbuf, vk::ImageView color, bool linear,
+                                        bool combine, u32 w, u32 h, float strength) {
+    // What moved without a motion vector (characters, animated objects): the 3x3 patch of the frame
+    // against a reference of the last frames reprojected with the camera motion, as the TAA's `changed`
+    // does, written into the reactive mask next to the stencil's. Strength 0 leaves everything alone and
+    // drops the reference (it would be stale when the slider comes back).
+    if (strength <= 0.0f || !color || !motion_mask_pipeline || !mask_ref[0] || !mask_ref[1] ||
+        w != width || h != height) {
+        mask_ref_valid = false;
+        return false;
+    }
+    const bool valid = mask_ref_valid && !reset;
+    const u32 out = mask_ref_next, in = 1 - mask_ref_next;
+    const auto all = vk::PipelineStageFlagBits2::eAllCommands;
+    const auto compute_stage = vk::PipelineStageFlagBits2::eComputeShader;
+    const auto barrier = [&](vk::Image image, vk::ImageLayout old_layout, vk::AccessFlags2 src_access,
+                             vk::AccessFlags2 dst_access) {
+        const vk::ImageMemoryBarrier2 b{
+            .srcStageMask = all, .srcAccessMask = src_access,
+            .dstStageMask = compute_stage, .dstAccessMask = dst_access,
+            .oldLayout = old_layout, .newLayout = vk::ImageLayout::eGeneral,
+            .image = image,
+            .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1},
+        };
+        cmdbuf.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &b});
+    };
+    constexpr auto memory = vk::AccessFlagBits2::eMemoryRead | vk::AccessFlagBits2::eMemoryWrite;
+    barrier(vk::Image(mask_ref[in]), valid ? vk::ImageLayout::eGeneral : vk::ImageLayout::eUndefined,
+            vk::AccessFlagBits2::eMemoryWrite, vk::AccessFlagBits2::eShaderSampledRead);
+    barrier(vk::Image(mask_ref[out]), vk::ImageLayout::eUndefined, vk::AccessFlagBits2::eNone,
+            vk::AccessFlagBits2::eShaderStorageWrite);
+    barrier(vk::Image(reactive_image), combine ? vk::ImageLayout::eGeneral : vk::ImageLayout::eUndefined,
+            combine ? memory : vk::AccessFlagBits2::eNone,
+            vk::AccessFlagBits2::eShaderStorageRead | vk::AccessFlagBits2::eShaderStorageWrite);
+    const vk::DescriptorImageInfo color_info{.sampler = *motion_mask_sampler, .imageView = color,
+                                             .imageLayout = vk::ImageLayout::eGeneral};
+    const vk::DescriptorImageInfo motion_info{.sampler = *motion_mask_sampler,
+                                              .imageView = *motion_view,
+                                              .imageLayout = vk::ImageLayout::eGeneral};
+    const vk::DescriptorImageInfo ref_in_info{.sampler = *motion_mask_sampler,
+                                              .imageView = *mask_ref_views[in],
+                                              .imageLayout = vk::ImageLayout::eGeneral};
+    const vk::DescriptorImageInfo ref_out_info{.imageView = *mask_ref_views[out],
+                                               .imageLayout = vk::ImageLayout::eGeneral};
+    const vk::DescriptorImageInfo mask_info{.imageView = *reactive_view,
+                                            .imageLayout = vk::ImageLayout::eGeneral};
+    const std::array<vk::WriteDescriptorSet, 5> writes{{
+        {.dstBinding = 0, .descriptorCount = 1,
+         .descriptorType = vk::DescriptorType::eCombinedImageSampler, .pImageInfo = &color_info},
+        {.dstBinding = 1, .descriptorCount = 1,
+         .descriptorType = vk::DescriptorType::eCombinedImageSampler, .pImageInfo = &motion_info},
+        {.dstBinding = 2, .descriptorCount = 1,
+         .descriptorType = vk::DescriptorType::eCombinedImageSampler, .pImageInfo = &ref_in_info},
+        {.dstBinding = 3, .descriptorCount = 1,
+         .descriptorType = vk::DescriptorType::eStorageImage, .pImageInfo = &ref_out_info},
+        {.dstBinding = 4, .descriptorCount = 1,
+         .descriptorType = vk::DescriptorType::eStorageImage, .pImageInfo = &mask_info},
+    }};
+    // Tuned on the simulator: a still picture and pans stay under ~1 % of pixels, objects moving at
+    // 0.4 px per frame and up are found in 80 % to 100 % of their interior.
+    struct Push {
+        float strength;
+        u32 flags;
+        float lo, hi;
+    } push{std::clamp(strength, 0.0f, 1.0f),
+           (valid ? 0u : 1u) | (combine ? 2u : 0u) | (linear ? 4u : 0u), 0.015f, 0.06f};
+    cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, *motion_mask_pipeline);
+    cmdbuf.pushDescriptorSetKHR(vk::PipelineBindPoint::eCompute, *motion_mask_pipeline_layout, 0,
+                                writes);
+    cmdbuf.pushConstants(*motion_mask_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0,
+                         sizeof(push), &push);
+    cmdbuf.dispatch((w + 7) / 8, (h + 7) / 8, 1);
+    const vk::ImageMemoryBarrier2 done{
+        .srcStageMask = compute_stage, .srcAccessMask = vk::AccessFlagBits2::eShaderStorageWrite,
+        .dstStageMask = all, .dstAccessMask = vk::AccessFlagBits2::eShaderRead,
+        .oldLayout = vk::ImageLayout::eGeneral, .newLayout = vk::ImageLayout::eGeneral,
+        .image = vk::Image(reactive_image),
+        .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1},
+    };
+    cmdbuf.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &done});
+    mask_ref_next = in;
+    mask_ref_valid = true;
+    return true;
+}
+
 void TemporalUpscaler::RunLdr() {
     if ((UseFsr4() && (SpartanSettings::Get().upscaler != SpartanSettings::UpscalerFsr411 ||
                        !fsr4->DriverAvailable())) ||
@@ -631,9 +717,19 @@ void TemporalUpscaler::RunLdr() {
     }
     last_frame = now;
 
-    const bool stencil_mask =
+    bool stencil_mask =
         !UseFsr4() && (RecordStencilReactive(cmdbuf, depth, depth_format, w, h) ||
                        (mask_ready && ReactiveOn()));
+    if (SpartanSettings::Get().upscaler == SpartanSettings::UpscalerFsr3Ui && !UseFsr4()) {
+        // FSR 3.1 with native HUD: also what moved without a motion vector (motion_mask.comp).
+        stencil_mask = RecordMotionMask(cmdbuf,
+                                        CachedView(color, color.info.pixel_format,
+                                                   vk::ImageAspectFlagBits::eColor),
+                                        color.info.pixel_format == vk::Format::eR8G8B8A8Srgb,
+                                        stencil_mask, w, h,
+                                        float(SpartanSettings::Get().fsr_motion.load()) / 100.0f) ||
+                       stencil_mask;
+    }
     // SPARTAN_DUMP_TRIGGER: the composite before FSR, motion, depth, then FSR's output.
     const int dump = DumpFrame();
     if (dump >= 0) {
@@ -1031,6 +1127,12 @@ bool TemporalUpscaler::EnsureResources(u32 w, u32 h, u32 ow, u32 oh, bool hdr) {
                    vk::ImageUsageFlagBits::eTransferSrc);
     make_image(reactive_image, reactive_view, vk::Format::eR8Unorm,
                vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled);
+    for (u32 i = 0; i < mask_ref.size(); ++i) {
+        make_image(mask_ref[i], mask_ref_views[i], vk::Format::eR16Sfloat,
+                   vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled);
+    }
+    mask_ref_valid = false;
+    mask_ref_next = 0;
     for (u32 i = 0; i < taa_history.size(); ++i) {
         taa_history_views[i].reset();
         taa_history[i] = VideoCore::UniqueImage{};
@@ -1159,6 +1261,38 @@ void TemporalUpscaler::CreatePipelines() {
         }));
     }
     stencil_reactive_pipeline = compute(STENCIL_REACTIVE_COMP, *stencil_reactive_pipeline_layout);
+    {
+        // Motion mask: the scene, the camera motion and the last reference (sampled), the new reference
+        // and the reactive mask (storage).
+        std::array<vk::DescriptorSetLayoutBinding, 5> bindings{};
+        for (u32 i = 0; i < bindings.size(); ++i) {
+            bindings[i] = {.binding = i,
+                .descriptorType = i < 3 ? vk::DescriptorType::eCombinedImageSampler
+                                        : vk::DescriptorType::eStorageImage,
+                .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eCompute};
+        }
+        motion_mask_desc_layout = Check(device.createDescriptorSetLayoutUnique({
+            .flags = vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR,
+            .bindingCount = u32(bindings.size()),
+            .pBindings = bindings.data(),
+        }));
+        const vk::PushConstantRange push{.stageFlags = vk::ShaderStageFlagBits::eCompute,
+                                         .offset = 0,
+                                         .size = 4 * sizeof(u32)};
+        motion_mask_pipeline_layout = Check(device.createPipelineLayoutUnique({
+            .setLayoutCount = 1,
+            .pSetLayouts = &*motion_mask_desc_layout,
+            .pushConstantRangeCount = 1,
+            .pPushConstantRanges = &push,
+        }));
+        motion_mask_sampler = Check(device.createSamplerUnique({
+            .magFilter = vk::Filter::eLinear, .minFilter = vk::Filter::eLinear,
+            .mipmapMode = vk::SamplerMipmapMode::eNearest,
+            .addressModeU = vk::SamplerAddressMode::eClampToEdge,
+            .addressModeV = vk::SamplerAddressMode::eClampToEdge,
+            .addressModeW = vk::SamplerAddressMode::eClampToEdge}));
+        motion_mask_pipeline = compute(MOTION_MASK_COMP, *motion_mask_pipeline_layout);
+    }
     storage_layout(2, taa_sharpen_desc_layout, taa_sharpen_pipeline_layout, sizeof(float));
     taa_sharpen_pipeline = compute(TAA_SHARPEN_COMP, *taa_sharpen_pipeline_layout);
     taa_sharpen_ldr_pipeline = compute(TAA_SHARPEN_LDR_COMP, *taa_sharpen_pipeline_layout);
@@ -1260,16 +1394,17 @@ void TemporalUpscaler::RecordTaa(vk::CommandBuffer cmdbuf, vk::ImageView color,
         const auto& xs = SpartanSettings::Get();
         const bool camera = camera_motion.ViewProjectionCamera();
         const float strength = camera ? std::clamp(xs.xess_sharpen.load() / 100.0f, 0.0f, 2.0f) : 0.0f;
-        static std::array<int, 3> logged{-1, -1, -1}, pending{-1, -1, -1};
+        static std::array<int, 4> logged{-1, -1, -1, -1}, pending{-1, -1, -1, -1};
         static u32 stable_frames = 0;
-        const std::array<int, 3> now{xs.taa_lod.load(), xs.xess_sharpen.load(), xs.xess_objects.load()};
+        const std::array<int, 4> now{xs.taa_lod.load(), xs.xess_sharpen.load(), xs.xess_objects.load(),
+                                     xs.xess_motion.load()};
         if (now != pending) {
             pending = now;
             stable_frames = 0;
         } else if (stable_frames < 12 && ++stable_frames == 12 && pending != logged) {
             logged = pending;
-            std::printf("XeSS look: texture detail %d sharpen %d moving objects %d\n", now[0], now[1],
-                        now[2]);
+            std::printf("XeSS look: texture detail %d sharpen %d moving objects %d motion detection %d\n",
+                        now[0], now[1], now[2], now[3]);
         }
         if (strength > 0.0f) {
             SharpenImage(cmdbuf, vk::Image(output_image), false, out_width, out_height, strength);
@@ -1448,21 +1583,29 @@ void TemporalUpscaler::ExtraSharpen(vk::CommandBuffer cmdbuf, vk::Image target, 
     }
     if (settings.upscaler == SpartanSettings::UpscalerFsr3Ui) {
         // One line when the FSR 3.1 look settles (the sliders change it every frame while dragged).
-        static std::array<int, 2> logged{-1, -1}, pending{-1, -1};
+        static std::array<int, 4> logged{-1, -1, -1, -1}, pending{-1, -1, -1, -1};
         static u32 stable_frames = 0;
-        const std::array<int, 2> now{settings.fsr_lod.load(), settings.fsr_objects.load()};
+        const std::array<int, 4> now{settings.fsr_lod.load(), settings.fsr_objects.load(),
+                                     settings.fsr_motion.load(), settings.fsr_sharpen.load()};
         if (now != pending) {
             pending = now;
             stable_frames = 0;
         } else if (stable_frames < 12 && ++stable_frames == 12 && pending != logged) {
             logged = pending;
-            std::printf("FSR look: texture detail %d moving objects %d\n", now[0], now[1]);
+            std::printf("FSR look: texture detail %d moving objects %d motion detection %d sharpen %d\n",
+                        now[0], now[1], now[2], now[3]);
         }
     }
-    if (!SharpenOn() || extra <= 0.0f) {
+    float strength = SharpenOn() ? extra : 0.0f;
+    if (settings.upscaler == SpartanSettings::UpscalerFsr3Ui) {
+        // The native-HUD FSR 3.1 has the TAA's sharpening slider (default 140%), which does not depend
+        // on the RCAS switch; the older RCAS strength keeps working beneath it.
+        strength = std::max(strength, std::clamp(settings.fsr_sharpen.load() / 100.0f, 0.0f, 2.0f));
+    }
+    if (strength <= 0.0f) {
         return;
     }
-    SharpenImage(cmdbuf, target, ldr, w, h, extra);
+    SharpenImage(cmdbuf, target, ldr, w, h, strength);
 }
 
 void TemporalUpscaler::SharpenImage(vk::CommandBuffer cmdbuf, vk::Image target, bool ldr, u32 w,
@@ -2049,8 +2192,14 @@ void TemporalUpscaler::RunSceneTaa() {
 
     // XeSS's responsive mask: the characters and objects of the scene stencil (they move without
     // motion vectors, so their history would ghost). The mask pass needs the depth in General.
-    const bool has_mask = SpartanSettings::Get().upscaler == SpartanSettings::UpscalerXess &&
-                          RecordStencilReactive(cmdbuf, depth, depth_format, w, h);
+    const bool xess_on = SpartanSettings::Get().upscaler == SpartanSettings::UpscalerXess;
+    bool has_mask = xess_on && RecordStencilReactive(cmdbuf, depth, depth_format, w, h);
+    if (xess_on) {
+        // ... plus what moved without a motion vector, found by comparing the frames (motion_mask.comp).
+        has_mask = RecordMotionMask(cmdbuf, color_view, srgb_color, has_mask, w, h,
+                                    float(SpartanSettings::Get().xess_motion.load()) / 100.0f) ||
+                   has_mask;
+    }
     const XessInputs xess_inputs{color.GetImage(), depth.GetImage(),
                                  srgb_color ? vk::Format::eR8G8B8A8Srgb : vk::Format::eR8G8B8A8Unorm,
                                  depth_format, w, h, has_mask};
@@ -2644,8 +2793,17 @@ void TemporalUpscaler::RunScaled() {
                            FFX_VK_PORTABLE_RESOURCE_STATE_UNORDERED_ACCESS);
     info.exposure.structSize = sizeof(info.exposure);
     info.reactiveMask.structSize = sizeof(info.reactiveMask);
-    if ((scaled_session || (w == iw && h == ih)) &&
-        RecordStencilReactive(cmdbuf, depth, depth_format, w, h)) {
+    bool stencil_ready = (scaled_session || (w == iw && h == ih)) &&
+                         RecordStencilReactive(cmdbuf, depth, depth_format, w, h);
+    if (scaled_session && SpartanSettings::Get().upscaler == SpartanSettings::UpscalerFsr3Ui) {
+        // FSR 3.1 with native HUD: also what moved without a motion vector (motion_mask.comp).
+        stencil_ready = RecordMotionMask(cmdbuf, color_view,
+                                         color.info.pixel_format == vk::Format::eR8G8B8A8Srgb,
+                                         stencil_ready, w, h,
+                                         float(SpartanSettings::Get().fsr_motion.load()) / 100.0f) ||
+                        stencil_ready;
+    }
+    if (stencil_ready) {
         info.reactiveMask = Describe(vk::Image(reactive_image), vk::Format::eR8Unorm, w, h,
             vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled,
             vk::ImageAspectFlagBits::eColor, FFX_VK_PORTABLE_RESOURCE_STATE_GENERIC_READ);

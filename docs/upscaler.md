@@ -52,7 +52,9 @@ game keeps its own 1920x1080 targets (the live path, as the TAA does) and only t
 Only this variant uses the port's own FSR sharpening (the Sharpening (RCAS) switch and
 strength, and the extra pass above FSR's maximum); FSR 3.1, FSR 4 and FSR 4.1 keep upstream's
 (`sharpen`, `sharpness`). Switching between a patched and a live-path upscaler needs a restart.
-The Insert menu (Image tab) has an "FSR 3.1 look" section for it: Texture detail (`fsr_lod`, a negative
+The same moving object detection as XeSS's (`fsr_motion`, default 70%, 0 = off) is added to the reactive
+mask there, and the TAA's sharpening pass has its own slider (`fsr_sharpen`, default 140%, independent of the
+RCAS switch, which keeps working beneath it). The Insert menu (Image tab) has an "FSR 3.1 look" section for it: Texture detail (`fsr_lod`, a negative
 mip bias in percent of a level, default 0) and Moving objects (`fsr_objects`, the strength of the
 stencil reactive mask on characters and objects, default 100 = upstream's), both live.
 
@@ -438,13 +440,21 @@ Windows only), the hook is `TemporalUpscaler::RecordXess`.
   for an idle GPU (at the start and when the picture changes size) hold `Scheduler::submit_mutex`, the lock
   the scheduler and the presenter take around `vkQueueSubmit` and `vkQueuePresent`.
 - The TAA look sliders (history, tolerance, moving objects, edges) do not apply to XeSS, which has its own
-  history. Texture detail (`taa_lod`, the rasterizer's mip bias) and the sharpening (`xess_sharpen`, default 145%; the
+  history. Texture detail (`taa_lod`, the rasterizer's mip bias) and the sharpening (`xess_sharpen`, default 140%; the
   `taa_sharpen.comp` pass run over the output image through `SharpenImage`) do, and are logged as
   `XeSS look:`. If XeSS cannot run, the TAA does, and the menu shows why.
 - Ghosting: the scene TAA's motion vectors are the camera's only (characters have none), so XeSS gets a
   responsive pixel mask (`XESS_INIT_FLAG_RESPONSIVE_PIXEL_MASK`, R8): the scene stencil's characters and
   objects, the mask `RecordStencilReactive` makes for FSR, clipped by `xessSetMaxResponsiveMaskValue` to
   the menu's "Moving objects" (`xess_objects`, default 95%, 0 = off). Without a stencil XeSS runs without it.
+- Moving object detection (`xess_motion`, default 70%, 0 = off): the stencil only marks what the game
+  draws as a character. `motion_mask.comp` also marks what changed on its own, the way the TAA's
+  `changed` does: the 3x3 patch of the frame against a reference luma of the last frames, reprojected with
+  the camera motion (a half-resolution-free R16F ping-pong image, a still pixel takes half of the new
+  value, a changed one all of it). It is max-combined into the same responsive mask, so `xess_objects`
+  clips it too. Simulator (160x112, jittered, 8 phases): a still picture or a pan marks about 1 % of the
+  pixels, an object moving 0.4 px per frame without a motion vector is found on ~80 % of its interior,
+  one at 2.5 px per frame on all of it.
 - Jitter sign: the same as FSR's; `SPARTAN_XESS_INVERT_JITTER=1` flips it for a test.
 - XeSS is meant to run before tonemapping; here it gets the tonemapped scene, because that is where the
   game's TAA sits. Treat the quality as unproven.

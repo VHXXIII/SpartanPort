@@ -176,6 +176,10 @@ struct Values {
     /// strength of characters and objects (the stencil mask: 100 is upstream's, lower is sharper but
     /// ghosts more).
     std::atomic<int> fsr_lod{0}, fsr_objects{100};
+    /// FSR 3.1 with native HUD and text: the reactive strength of what moved without a motion vector
+    /// (the same detection as the TAA's, motion_mask.comp; 0 = off), and the sharpening after FSR (the
+    /// TAA's pass, 0 = off, independent of the RCAS switch), percent, live.
+    std::atomic<int> fsr_motion{70}, fsr_sharpen{140};
     /// TAA debug view (not saved): red = history rejected by depth, green = lost to colour change /
     /// moving-object detection, blue = history weight used.
     std::atomic<bool> taa_debug{false};
@@ -185,8 +189,11 @@ struct Values {
     /// XeSS: how far its history is distrusted on characters and objects (the scene stencil as its
     /// responsive mask, as FSR 3.1's "moving objects"); 0 = off, saved. Live.
     std::atomic<int> xess_objects{95};
+    /// XeSS: the reactive strength of what moved without a motion vector (motion_mask.comp, clipped by
+    /// xess_objects like the stencil mask; 0 = off), percent, live.
+    std::atomic<int> xess_motion{70};
     /// XeSS: sharpening after it (the same pass as taa_sharpen, which is the TAA's own), percent, live.
-    std::atomic<int> xess_sharpen{145};
+    std::atomic<int> xess_sharpen{140};
     /// The game's depth of field (spartanport_depth_of_field.h); off keeps the whole picture sharp. Live.
     std::atomic<bool> depth_of_field{true};
     /// Anti-aliasing of the finished frame (SpartanGraphics::AntiAliasing: off, FXAA, SMAA). Live.

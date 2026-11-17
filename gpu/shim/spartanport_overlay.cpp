@@ -602,9 +602,13 @@ void ImageTab() {
                           "How much XeSS distrusts its history on characters and objects (a mask from the "
                           "game's stencil). Higher: less ghosting behind them, rougher edges. 0% = off. "
                           "Default 95%.");
+                SliderRow("Moving object detection", s.xess_motion, 0, 100, "%d%%",
+                          "Marks what moved without a motion vector (characters, animated objects) by comparing "
+                          "the picture with the last frames, and tells XeSS to trust its history less there. "
+                          "Higher: fewer trails behind them, rougher edges. 0% = off. Default 70%.");
                 SliderRow("Sharpening", s.xess_sharpen, 0, 200, "%d%%",
                           "Sharpening after XeSS, separate from the Sharpening (RCAS) switch below. 0% = off. "
-                          "Default 145%.");
+                          "Default 140%.");
                 ImGui::EndTable();
             }
         }
@@ -650,6 +654,13 @@ void ImageTab() {
             SliderRow("Moving objects", s.fsr_objects, 0, 100, "%d%%",
                       "How much FSR distrusts its history on characters and objects. Higher: less ghosting "
                       "behind them, rougher edges. Lower: smoother but more trails. Default 100%.");
+            SliderRow("Moving object detection", s.fsr_motion, 0, 100, "%d%%",
+                      "Marks what moved without a motion vector (characters, animated objects) by comparing "
+                      "the picture with the last frames, and tells FSR to trust its history less there. "
+                      "Higher: fewer trails behind them, rougher edges. 0% = off. Default 70%.");
+            SliderRow("Sharpening", s.fsr_sharpen, 0, 200, "%d%%",
+                      "Sharpening after FSR (the TAA's pass), separate from the Sharpening (RCAS) switch "
+                      "below. 0% = off. Default 140%.");
             ImGui::EndTable();
         }
     }
