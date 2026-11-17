@@ -450,7 +450,7 @@ Windows only), the hook is `TemporalUpscaler::RecordXess`.
 - Moving object detection (`xess_motion`, default 70%, 0 = off): the stencil only marks what the game
   draws as a character. `motion_mask.comp` also marks what changed on its own, the way the TAA's
   `changed` does: the 3x3 patch of the frame against a reference luma of the last frames, reprojected with
-  the camera motion (a half-resolution-free R16F ping-pong image, a still pixel takes half of the new
+  the camera motion (an R16F ping-pong image, a still pixel takes half of the new
   value, a changed one all of it). It is max-combined into the same responsive mask, so `xess_objects`
   clips it too. Simulator (160x112, jittered, 8 phases): a still picture or a pan marks about 1 % of the
   pixels, an object moving 0.4 px per frame without a motion vector is found on ~80 % of its interior,
